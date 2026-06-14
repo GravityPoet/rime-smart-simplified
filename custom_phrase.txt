@@ -1,0 +1,13 @@
+# Rime table
+#@/db_name	custom_phrase.txt
+#@/db_type	tabledb
+#
+# Public template only. Add personal shortcuts locally, but do not commit
+# phone numbers, email addresses, account ids, recovery phrases, or private
+# project names.
+
+GitHub	github	100
+Rime	rime	100
+开源	kaiyuan	100
+本地优先	bendiyouxian	100
+离线可用	lixiankeyong	100

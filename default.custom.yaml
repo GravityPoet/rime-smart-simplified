@@ -1,0 +1,40 @@
+patch:
+  switcher/save_options:
+    - ascii_punct
+    - traditionalization
+    - emoji
+    - full_shape
+    - search_single_char
+    - smart_context
+    - smart_chat
+    - smart_write
+    - smart_code
+
+  # 菜单
+  menu:
+    page_size: 9  # 候选词个数
+    # alternative_select_labels: [ ①, ②, ③, ④, ⑤, ⑥, ⑦, ⑧, ⑨, ⑩ ]  # 修改候选项标签
+    # alternative_select_keys: ASDFGHJKL  # 如编码字符占用数字键，则需另设选字键
+    # ascii_mode、inline、no_inline、vim_mode 等设定可参考
+    # /Library/Input Methods/Squirrel.app/Contents/SharedSupport/squirrel.yaml
+
+  # 中西文切换
+  #
+  # 【good_old_caps_lock】 CapsLock 切换到大写或切换中英。
+  # （macOS 偏好设置优先级更高，如果勾选【使用大写锁定键切换“ABC”输入法】则始终会切换输入法）
+  #
+  # 切换中英说明：
+  # commit_code  上屏原始编码，然后切换到英文
+  # commit_text  上屏已拼出的词句，然后切换到英文
+  # clear        清除未上屏内容，然后切换到英文
+  # inline_ascii 无输入时，直接中英切换；有输入时，切换临时英文模式，按回车上屏后回中文
+  # noop         不切换中英（屏蔽快捷键），但不屏蔽 CapsLock
+  ascii_composer:
+    good_old_caps_lock: true  # true | false
+    switch_key:
+      Caps_Lock: clear    # 可选项：commit_code | commit_text | clear
+      Shift_L: commit_code  # 临时英文：回车上屏后自动回中文
+      Shift_R: commit_code  # 同上
+      Control_L: noop       # commit_code | commit_text | inline_ascii | clear | noop
+      Control_R: noop       # commit_code | commit_text | inline_ascii | clear | noop
+       

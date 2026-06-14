@@ -1,0 +1,190 @@
+# rime_ice.custom.yaml
+# 目标：保留雾凇本地智能链路，并收敛到接近搜狗但不过敏的候选体验
+patch:
+  switches:
+    - name: ascii_mode
+      states: [ 中, Ａ ]
+    - name: ascii_punct
+      states: [ ¥, $ ]
+    - name: traditionalization
+      states: [ 简, 繁 ]
+    - name: emoji
+      states: [ 💀, 😄 ]
+      reset: 1
+    - name: full_shape
+      states: [ 半角, 全角 ]
+    - name: search_single_char
+      states: [ 正常, 单字 ]
+      abbrev: [ 词, 单 ]
+    - name: smart_context
+      states: [ 上下文关, 上下文 ]
+      abbrev: [ 文关, 文 ]
+      reset: 1
+    - name: smart_chat
+      states: [ 常规, 聊天 ]
+      abbrev: [ 常, 聊 ]
+    - name: smart_write
+      states: [ 常规, 写作 ]
+      abbrev: [ 常, 写 ]
+    - name: smart_code
+      states: [ 常规, 代码 ]
+      abbrev: [ 常, 码 ]
+
+  engine/processors:
+    - predictor
+    - lua_processor@cold_word_drop_processor
+    - lua_processor@*select_character
+    - ascii_composer
+    - recognizer
+    - key_binder
+    - speller
+    - punctuator
+    - selector
+    - navigator
+    - express_editor
+
+  engine/translators:
+    - lua_translator@*abbrev_translator
+    - predict_translator
+    - lua_translator@smart_assist_translator
+    - history_translator@history
+    - punct_translator
+    - script_translator
+    - lua_translator@*date_translator
+    - lua_translator@*lunar
+    - lua_translator@*uuid
+    - table_translator@custom_phrase
+    - table_translator@melt_eng
+    - table_translator@cn_en
+    - table_translator@radical_lookup
+    - lua_translator@*unicode
+    - lua_translator@*number_translator
+    - lua_translator@*calc_translator
+    - lua_translator@*force_gc
+
+  engine/filters:
+    - lua_filter@*corrector
+    - reverse_lookup_filter@radical_reverse_lookup
+    - lua_filter@*autocap_filter
+    - lua_filter@*v_filter
+    - lua_filter@*pin_cand_filter
+    - lua_filter@*long_word_filter
+    - lua_filter@*reduce_english_filter
+    - simplifier@emoji
+    - lua_filter@smart_mode_filter
+    - lua_filter@context_boost_filter
+    - simplifier@traditionalize
+    - lua_filter@*search@radical_pinyin
+    - lua_filter@pin_by_select
+    - lua_filter@short_code_clean_filter
+    - lua_filter@cold_word_drop_filter
+    - lua_filter@rq_date_first_filter
+
+  # 搜狗感增强：只保留高收益模糊音，避免过宽容错导致候选噪声暴涨
+  speller/algebra:
+    # === 万象词库去调层：必须保持在 algebra 最前 ===
+    - xform/ā/a/
+    - xform/á/a/
+    - xform/ǎ/a/
+    - xform/à/a/
+    - xform/ō/o/
+    - xform/ó/o/
+    - xform/ǒ/o/
+    - xform/ò/o/
+    - xform/ē/e/
+    - xform/é/e/
+    - xform/ě/e/
+    - xform/è/e/
+    - xform/ī/i/
+    - xform/í/i/
+    - xform/ǐ/i/
+    - xform/ì/i/
+    - xform/ū/u/
+    - xform/ú/u/
+    - xform/ǔ/u/
+    - xform/ù/u/
+    - xform/ǖ/v/
+    - xform/ǘ/v/
+    - xform/ǚ/v/
+    - xform/ǜ/v/
+    - xform/ü/v/
+    - xform/ń/n/
+    - xform/ň/n/
+    - xform/ǹ/n/
+    - xform/ḿ/m/
+    # === 鼻音音节归一：万象「嗯 ǹ/ǹg」按雾凇习惯映射为 en（en/eng 均可打出），
+    # 必须在模糊音 derive 之前，否则 derive/^n/l/ 会把鼻音派生进 l 键候选
+    - xform/^ng$/en/
+    - xform/^n$/en/
+    - erase/^hm$/
+    - erase/^m$/
+    # === 去调层结束，以下为原有模糊音/简拼规则 ===
+    # z/c/s 与 zh/ch/sh：搜狗类输入法最常见的模糊音
+    - derive/^([zcs])h/$1/
+    - derive/^([zcs])([^h])/$1h$2/
+    # n/l、f/h：保留常见口音容错；不再开启 r/l、g/k 这类高噪声互换
+    - derive/^n/l/
+    - derive/^l/n/
+    - derive/^f/h/
+    - derive/^h/f/
+    # 前后鼻音：覆盖 an/ang、en/eng、in/ing
+    - derive/ang$/an/
+    - derive/an$/ang/
+    - derive/eng$/en/
+    - derive/en$/eng/
+    - derive/in$/ing/
+    - derive/ing$/in/
+    # 少量高频复合鼻音：保留 ian/iang、uan/uang，删除 ong/un 等误伤大的规则
+    - derive/ian$/iang/
+    - derive/iang$/ian/
+    - derive/uan$/uang/
+    - derive/uang$/uan/
+    # 快速输入常见错拼：只加低噪声尾部纠错，不做大范围乱序容错
+    - derive/ing$/ign/
+    - derive/ing$/img/
+    - derive/ui$/uei/
+    - derive/un$/uen/
+    - derive/iu$/iou/
+    # 简拼：保留首字母与 zh/ch/sh 简拼
+    - abbrev/^([a-z]).+$/$1/
+    - abbrev/^([zcs]h).+$/$1/
+    # v/u 兼容：保留 nv/lv、ju/qu/xu 等输入习惯
+    - derive/^([nl])ve$/$1ue/
+    - derive/^([jqxy])u/$1v/
+    - derive/^([nl])ue$/$1ve/
+    - derive/^([jqxy])v/$1u/
+  # ASCII 缩写扩展、短码降噪与计数式软置顶已在 engine 链路中显式挂载
+  # 静态置顶：高频短码先固定常用中文，再交给学习排序微调
+  pin_cand_filter:
+    - "de\t的 得 地"
+    - "ai\tAI 爱"
+  # 语言模型：万象 LTS（大语料 3-gram，整句智能远强于八股文 essay-bgw）
+  # 回滚：把下方 grammar 块整体删除并恢复 `__include: grammar:/hans`
+  grammar:
+    language: wanxiang-lts-zh-hans
+    collocation_max_length: 5
+    collocation_min_length: 2
+  "translator/contextual_suggestions": true
+  "translator/max_homophones": 7
+  "translator/max_homographs": 7
+  "custom_phrase/initial_quality": 99
+  key_binder/drop_cand: "Control+Shift+d"
+  key_binder/hide_cand: "Control+Shift+x"
+  key_binder/reduce_freq_cand: "Control+Shift+j"
+  cold_word_reduce/idx: 5
+  cold_word_reduce/recover_uses: 6
+  cold_word_reduce/ttl_days: 14
+
+  # === 5. 预测输入（Sogou 感最强之一） ===
+  predictor:
+    db: predict.db
+
+  predict_translator:
+    db: predict.db
+    limit: 5
+  # 重复上次上屏：单击 z 首选刚上屏的内容（history_translator，librime 内置）
+  history:
+    input: z
+    size: 1
+    # 精确匹配（仅输入串恰为 z 时触发，已核 librime 源码），高 quality 不影响 zhang 等正常输入
+    initial_quality: 1000

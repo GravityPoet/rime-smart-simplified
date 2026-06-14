@@ -1,0 +1,79 @@
+# Rime dictionary
+# encoding: utf-8
+
+---
+name: rime_ice
+version: "2026-06-12-wanxiang"
+sort: by_weight
+use_preset_vocabulary: false
+import_tables:
+  - cn_dicts_wanxiang/zi          # 万象字表（带调注音，由 algebra 去调）
+  - cn_dicts_wanxiang/jichu       # 万象基础词库
+  - cn_dicts/smart_terms          # 用户专业词（权重已校准至万象量级）
+  - cn_dicts/smart_finance        # 用户投资词（同上）
+  - cn_dicts_wanxiang/lianxiang   # 长词联想（5 字以上整段）
+  - cn_dicts_wanxiang/cuoyin      # 错音错字兼容
+  - cn_dicts_wanxiang/duoyin      # 多音兼容
+  - cn_dicts_wanxiang/shici       # 诗词
+  - cn_dicts_wanxiang/diming      # 地名
+  - cn_dicts/41448                # 雾凇大字表殿后（无调，生僻字兜底）
+...
+
+# 按需启用：
+
+# 大写字母
+# 可在拼音方案下直接输入大写字母（Shift + 字母），大写字母参与造句。
+# 示例：输入 `zuogeDNAjiance` 得到 `做个DNA检测`
+# （非雾凇方案的双拼如果要启用，需要参考双拼方案下的 speller/algebra 将大写字母搭桥改成一些特殊字符）
+A	A
+B	B
+C	C
+D	D
+E	E
+F	F
+G	G
+H	H
+I	I
+J	J
+K	K
+L	L
+M	M
+N	N
+O	O
+P	P
+Q	Q
+R	R
+S	S
+T	T
+U	U
+V	V
+W	W
+X	X
+Y	Y
+Z	Z
+
+# 数字参与中文造词，方便输入一些特殊的 ID。配合大写字母造词可以自动为 `5G网络`，`3D打印` 等词汇注音
+0	ling
+1	yi
+1	yao
+2	er
+3	san
+4	si
+5	wu
+6	liu
+7	qi
+8	ba
+9	jiu
+
+# 示例：输入 sanDdayin 得到 3D打印
+M1
+M2
+M3
+M4
+3G
+4G
+5G
+2D
+3D
+4D
+3D打印

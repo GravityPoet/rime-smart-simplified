@@ -1,0 +1,478 @@
+# Rime dictionary
+# encoding: utf-8
+#
+# 本地投资 / 股票 / ETF / 期权 / 宏观 / 加密资产专业词库。
+# 只提升输入命中率，不包含价格、评级或投资建议。
+
+---
+name: smart_finance
+version: "2026-06-10"
+sort: by_weight
+columns:
+  - text
+  - code
+  - weight
+...
+资产配置	zi chan pei zhi	600
+再平衡	zai ping heng	600
+风险承受能力	feng xian cheng shou neng li	600
+风险偏好	feng xian pian hao	600
+风险预算	feng xian yu suan	600
+投资组合	tou zi zu he	600
+组合回撤	zu he hui che	600
+最大回撤	zui da hui che	600
+年化收益	nian hua shou yi	600
+年化收益率	nian hua shou yi lv	600
+复合年增长率	fu he nian zeng zhang lv	600
+CAGR	cagr	600
+夏普比率	xia pu bi lv	600
+索提诺比率	suo ti nuo bi lv	600
+卡玛比率	ka ma bi lv	600
+贝塔系数	bei ta xi shu	600
+阿尔法收益	a er fa shou yi	600
+超额收益	chao e shou yi	600
+基准指数	ji zhun zhi shu	600
+跟踪误差	gen zong wu cha	600
+信息比率	xin xi bi lv	600
+波动率	bo dong lv	600
+Realized Volatility	realizedvolatility	600
+已实现波动率	yi shi xian bo dong lv	600
+隐含波动率	yin han bo dong lv	600
+风险平价	feng xian ping jia	600
+全天候组合	quan tian hou zu he	600
+股债平衡	gu zhai ping heng	600
+核心卫星策略	he xin wei xing ce lue	600
+长期主义	chang qi zhu yi	600
+价值投资	jia zhi tou zi	600
+成长投资	cheng zhang tou zi	600
+质量因子	zhi liang yin zi	600
+动量因子	dong liang yin zi	600
+价值因子	jia zhi yin zi	600
+规模因子	gui mo yin zi	600
+低波动因子	di bo dong yin zi	600
+红利因子	hong li yin zi	600
+多因子	duo yin zi	600
+因子轮动	yin zi lun dong	600
+定投	ding tou	600
+网格交易	wang ge jiao yi	600
+再投资	zai tou zi	600
+股息再投资	gu xi zai tou zi	600
+股息率	gu xi lv	600
+股息收益率	gu xi shou yi lv	600
+自由现金流	zi you xian jin liu	600
+自由现金流收益率	zi you xian jin liu shou yi lv	600
+市盈率	shi ying lv	600
+动态市盈率	dong tai shi ying lv	600
+远期市盈率	yuan qi shi ying lv	600
+市净率	shi jing lv	600
+市销率	shi xiao lv	600
+企业价值	qi ye jia zhi	600
+息税折旧摊销前利润	xi shui zhe jiu tan xiao qian li run	600
+EBITDA	ebitda	600
+EV/EBITDA	evebitda	600
+ROE	roe	600
+ROIC	roic	600
+净资产收益率	jing zi chan shou yi lv	600
+投入资本回报率	tou ru zi ben hui bao lv	600
+DCF	dcf	600
+现金流折现	xian jin liu zhe xian	600
+安全边际	an quan bian ji	600
+护城河	hu cheng he	600
+逆向投资	ni xiang tou zi	600
+均值回归	jun zhi hui gui	600
+左侧交易	zuo ce jiao yi	600
+右侧交易	you ce jiao yi	600
+仓位管理	cang wei guan li	600
+止损	zhi sun	600
+止盈	zhi ying	600
+回撤控制	hui che kong zhi	600
+
+ETF	etf	600
+主动ETF	zhu dong etf	600
+指数ETF	zhi shu etf	600
+股票ETF	gu piao etf	600
+债券ETF	zhai quan etf	600
+商品ETF	shang pin etf	600
+黄金ETF	huang jin etf	600
+货币ETF	huo bi etf	600
+宽基ETF	kuan ji etf	600
+行业ETF	hang ye etf	600
+主题ETF	zhu ti etf	600
+杠杆ETF	gang gan etf	600
+反向ETF	fan xiang etf	600
+低波ETF	di bo etf	600
+红利ETF	hong li etf	600
+质量ETF	zhi liang etf	600
+因子ETF	yin zi etf	600
+比特币ETF	bi te bi etf	600
+现货比特币ETF	xian huo bi te bi etf	600
+以太坊ETF	yi tai fang etf	600
+现货以太坊ETF	xian huo yi tai fang etf	600
+ETF申购赎回	etf shen gou shu hui	600
+授权参与人	shou quan can yu ren	600
+一篮子证券	yi lan zi zheng quan	600
+折溢价	zhe yi jia	600
+净值	jing zhi	600
+基金净值	ji jin jing zhi	600
+单位净值	dan wei jing zhi	600
+累计净值	lei ji jing zhi	600
+管理费率	guan li fei lv	600
+托管费率	tuo guan fei lv	600
+换手率	huan shou lv	600
+场内基金	chang nei ji jin	600
+场外基金	chang wai ji jin	600
+封闭式基金	feng bi shi ji jin	600
+开放式基金	kai fang shi ji jin	600
+目标日期基金	mu biao ri qi ji jin	600
+货币市场基金	huo bi shi chang ji jin	600
+短债基金	duan zhai ji jin	600
+中短债基金	zhong duan zhai ji jin	600
+可转债基金	ke zhuan zhai ji jin	600
+QDII	qdii	600
+REITs	reits	600
+公募REITs	gong mu reits	600
+基础设施REITs	ji chu she shi reits	600
+
+A股	ag	600
+港股	gang gu	600
+美股	mei gu	600
+中概股	zhong gai gu	600
+蓝筹股	lan chou gu	600
+成长股	cheng zhang gu	600
+价值股	jia zhi gu	600
+周期股	zhou qi gu	600
+防御股	fang yu gu	600
+小盘股	xiao pan gu	600
+大盘股	da pan gu	600
+股息股	gu xi gu	600
+红利股	hong li gu	600
+龙头股	long tou gu	600
+概念股	gai nian gu	600
+绩优股	ji you gu	600
+优先股	you xian gu	600
+普通股	pu tong gu	600
+存托凭证	cun tuo ping zheng	600
+ADR	adr	600
+IPO	ipo	600
+增发	zeng fa	600
+回购	hui gou	600
+分红	fen hong	600
+派息	pai xi	600
+除权	chu quan	600
+除息	chu xi	600
+财报	cai bao	600
+财报季	cai bao ji	600
+业绩指引	ye ji zhi yin	600
+盈利预警	ying li yu jing	600
+超预期	chao yu qi	600
+低于预期	di yu yu qi	600
+一致预期	yi zhi yu qi	600
+卖方预期	mai fang yu qi	600
+买方预期	mai fang yu qi	600
+机构持仓	ji gou chi cang	600
+北向资金	bei xiang zi jin	600
+南向资金	nan xiang zi jin	600
+沪股通	hu gu tong	600
+深股通	shen gu tong	600
+港股通	gang gu tong	600
+融资融券	rong zi rong quan	600
+融券卖出	rong quan mai chu	600
+卖空	mai kong	600
+做空	zuo kong	600
+空头	kong tou	600
+多头	duo tou	600
+轧空	ga kong	600
+逼空	bi kong	600
+空头回补	kong tou hui bu	600
+
+期权	qi quan	600
+股票期权	gu piao qi quan	600
+指数期权	zhi shu qi quan	600
+ETF期权	etf qi quan	600
+看涨期权	kan zhang qi quan	600
+看跌期权	kan die qi quan	600
+认购期权	ren gou qi quan	600
+认沽期权	ren gu qi quan	600
+买入看涨	mai ru kan zhang	600
+买入看跌	mai ru kan die	600
+卖出看涨	mai chu kan zhang	600
+卖出看跌	mai chu kan die	600
+备兑看涨	bei dui kan zhang	600
+保护性看跌	bao hu xing kan die	600
+现金担保看跌	xian jin dan bao kan die	600
+跨式策略	kua shi ce lue	600
+宽跨式策略	kuan kua shi ce lue	600
+垂直价差	chui zhi jia cha	600
+牛市价差	niu shi jia cha	600
+熊市价差	xiong shi jia cha	600
+日历价差	ri li jia cha	600
+蝶式价差	die shi jia cha	600
+铁鹰策略	tie ying ce lue	600
+铁秃鹰	tie tu ying	600
+行权价	xing quan jia	600
+到期日	dao qi ri	600
+权利金	quan li jin	600
+内在价值	nei zai jia zhi	600
+时间价值	shi jian jia zhi	600
+实值期权	shi zhi qi quan	600
+平值期权	ping zhi qi quan	600
+虚值期权	xu zhi qi quan	600
+期权希腊值	qi quan xi la zhi	600
+Delta	delta	600
+Gamma	gamma	600
+Theta	theta	600
+Vega	vega	600
+Rho	rho	600
+期权Delta	qi quan delta	600
+期权Gamma	qi quan gamma	600
+期权Theta	qi quan theta	600
+期权Vega	qi quan vega	600
+期权Rho	qi quan rho	600
+IV	iv	600
+IV Rank	ivrank	600
+IV Percentile	ivpercentile	600
+波动率微笑	bo dong lv wei xiao	600
+波动率偏斜	bo dong lv pian xie	600
+隐波	yin bo	600
+历史波动率	li shi bo dong lv	600
+期权链	qi quan lian	600
+未平仓量	wei ping cang liang	600
+Open Interest	openinterest	600
+
+AI基建	ai ji jian	600
+AI基础设施	ai ji chu she shi	600
+AI资本开支	ai zi ben kai zhi	600
+AI算力	ai suan li	600
+推理算力	tui li suan li	600
+训练算力	xun lian suan li	600
+GPU云	gpu yun	600
+新云厂商	xin yun chang shang	600
+NeoCloud	neocloud	600
+主权AI	zhu quan ai	600
+数据中心	shu ju zhong xin	600
+数据中心REITs	shu ju zhong xin reits	600
+电力瓶颈	dian li ping jing	600
+电网升级	dian wang sheng ji	600
+液冷	ye leng	600
+光模块	guang mo kuai	600
+HBM	hbm	600
+先进封装	xian jin feng zhuang	600
+CoWoS	cowos	600
+晶圆代工	jing yuan dai gong	600
+半导体设备	ban dao ti she bei	600
+美股七巨头	mei gu qi ju tou	600
+七巨头	qi ju tou	600
+Magnificent Seven	magnificentseven	600
+
+宏观	hong guan	600
+宏观经济	hong guan jing ji	600
+通货膨胀	tong huo peng zhang	600
+核心通胀	he xin tong zhang	600
+CPI	cpi	600
+核心CPI	he xin cpi	600
+PCE	pce	600
+核心PCE	he xin pce	600
+非农	fei nong	600
+非农就业	fei nong jiu ye	600
+失业率	shi ye lv	600
+初请失业金	chu qing shi ye jin	600
+PMI	pmi	600
+ISM	ism	600
+FOMC	fomc	600
+美联储	mei lian chu	600
+点阵图	dian zhen tu	600
+鲍威尔	bao wei er	600
+议息会议	yi xi hui yi	600
+加息	jia xi	600
+降息	jiang xi	600
+暂停加息	zan ting jia xi	600
+量化宽松	liang hua kuan song	600
+QE	qe	600
+量化紧缩	liang hua jin suo	600
+QT	qt	600
+缩表	suo biao	600
+扩表	kuo biao	600
+美债	mei zhai	600
+美债收益率	mei zhai shou yi lv	600
+十年期美债	shi nian qi mei zhai	600
+实际利率	shi ji li lv	600
+名义利率	ming yi li lv	600
+通胀预期	tong zhang yu qi	600
+期限溢价	qi xian yi jia	600
+收益率曲线	shou yi lv qu xian	600
+收益率倒挂	shou yi lv dao gua	600
+利差倒挂	li cha dao gua	600
+信用利差	xin yong li cha	600
+高收益债	gao shou yi zhai	600
+投资级债	tou zi ji zhai	600
+软着陆	ruan zhuo lu	600
+硬着陆	ying zhuo lu	600
+经济衰退	jing ji shuai tui	600
+滞胀	zhi zhang	600
+再通胀	zai tong zhang	600
+去通胀	qu tong zhang	600
+美元指数	mei yuan zhi shu	600
+DXY	dxy	600
+日元套息交易	ri yuan tao xi jiao yi	600
+套息交易	tao xi jiao yi	600
+
+比特币	bi te bi	600
+以太坊	yi tai fang	600
+加密资产	jia mi zi chan	600
+数字资产	shu zi zi chan	600
+稳定币	wen ding bi	600
+稳定币法案	wen ding bi fa an	600
+稳定币发行人	wen ding bi fa xing ren	600
+USDT	usdt	600
+USDC	usdc	600
+链上数据	lian shang shu ju	600
+链上分析	lian shang fen xi	600
+现货ETF	xian huo etf	600
+比特币现货ETF	bi te bi xian huo etf	600
+以太坊现货ETF	yi tai fang xian huo etf	600
+Solana	solana	600
+SOL	sol	600
+Solana ETF	solanaetf	600
+代币化	dai bi hua	600
+资产代币化	zi chan dai bi hua	600
+现实世界资产	xian shi shi jie zi chan	600
+RWA	rwa	600
+Tokenization	tokenization	600
+DeFi	defi	600
+去中心化金融	qu zhong xin hua jin rong	600
+Layer2	layer2	600
+二层网络	er ceng wang luo	600
+质押	zhi ya	600
+再质押	zai zhi ya	600
+流动性质押	liu dong xing zhi ya	600
+空投	kong tou	600
+链上收益	lian shang shou yi	600
+矿工费	kuang gong fei	600
+Gas费	gasfei	600
+冷钱包	leng qian bao	600
+热钱包	re qian bao	600
+托管钱包	tuo guan qian bao	600
+自托管	zi tuo guan	600
+私钥	si yao	600
+公钥	gong yao	600
+助记词	zhu ji ci	600
+
+SPY	spy	600
+QQQ	qqq	600
+VOO	voo	600
+VTI	vti	600
+IVV	ivv	600
+IWM	iwm	600
+DIA	dia	600
+TLT	tlt	600
+IEF	ief	600
+SHY	shy	600
+LQD	lqd	600
+HYG	hyg	600
+GLD	gld	600
+IAU	iau	600
+IBIT	ibit	600
+FBTC	fbtc	600
+BITB	bitb	600
+ARKB	arkb	600
+ETHA	etha	600
+FETH	feth	600
+FSOL	fsol	600
+标普500	biao pu wu bai	600
+S&P500	sp500	600
+纳斯达克100	na si da ke yi bai	600
+道琼斯工业平均指数	dao qiong si gong ye ping jun zhi shu	600
+罗素2000	luo su er liang qian	600
+恐慌指数	kong huang zhi shu	600
+VIX	vix	600
+
+苹果	ping guo	600
+AAPL	aapl	600
+微软	wei ruan	600
+MSFT	msft	600
+英伟达	ying wei da	600
+NVIDIA	nvidia	600
+NVDA	nvda	600
+谷歌	gu ge	600
+Alphabet	alphabet	600
+GOOGL	googl	600
+亚马逊	ya ma xun	600
+Amazon	amazon	600
+AMZN	amzn	600
+Meta	meta	600
+META	meta	600
+特斯拉	te si la	600
+Tesla	tesla	600
+TSLA	tsla	600
+伯克希尔	bo ke xi er	600
+伯克希尔哈撒韦	bo ke xi er ha sa wei	600
+BRK.A	brka	600
+BRK.B	brkb	600
+台积电	tai ji dian	600
+TSMC	tsmc	600
+TSM	tsm	600
+摩根大通	mo gen da tong	600
+JPM	jpm	600
+Visa	visa	600
+V	vee	600
+万事达	wan shi da	600
+Mastercard	mastercard	600
+MA	ma	600
+礼来	li lai	600
+Eli Lilly	elililly	600
+LLY	lly	600
+博通	bo tong	600
+Broadcom	broadcom	600
+AVGO	avgo	600
+阿斯麦	a si mai	600
+ASML	asml	600
+奈飞	nai fei	600
+Netflix	netflix	600
+NFLX	nflx	600
+Salesforce	salesforce	600
+CRM	crm	600
+Adobe	adobe	600
+ADBE	adbe	600
+Palantir	palantir	600
+PLTR	pltr	600
+ARM	arm	600
+AMD	amd	600
+超威半导体	chao wei ban dao ti	600
+美光科技	mei guang ke ji	600
+MU	mu	600
+甲骨文	jia gu wen	600
+Oracle	oracle	600
+ORCL	orcl	600
+戴尔科技	dai er ke ji	600
+Dell	dell	600
+DELL	dell	600
+超微电脑	chao wei dian nao	600
+Super Micro	supermicro	600
+SMCI	smci	600
+Arista	arista	600
+ANET	anet	600
+Vertiv	vertiv	600
+VRT	vrt	600
+GE Vernova	gevernova	600
+GEV	gev	600
+星座能源	xing zuo neng yuan	600
+Constellation Energy	constellationenergy	600
+CEG	ceg	600
+Equinix	equinix	600
+EQIX	eqix	600
+Digital Realty	digitalrealty	600
+DLR	dlr	600
+Coinbase	coinbase	600
+COIN	coin	600
+Robinhood	robinhood	600
+HOOD	hood	600
+CoreWeave	coreweave	600
+CRWV	crwv	600
+小米	xiao mi	600
+腾讯控股	teng xun kong gu	600
+阿里巴巴	a li ba ba	600
+拼多多	pin duo duo	600
+京东	jing dong	600
+美团	mei tuan	600
+宁德时代	ning de shi dai	600
+贵州茅台	gui zhou mao tai	600

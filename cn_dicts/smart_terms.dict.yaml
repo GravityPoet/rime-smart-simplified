@@ -1,0 +1,137 @@
+# Rime dictionary
+# encoding: utf-8
+#
+# 本地热词 / 专业词补充：补齐搜狗式新词、AI、工程、产品、内容创作常用词。
+
+---
+name: smart_terms
+version: "2026-06-10"
+sort: by_weight
+columns:
+  - text
+  - code
+  - weight
+...
+OpenCode	opencode	600
+搜狗输入法	sou gou shu ru fa	600
+雾凇输入法	wu song shu ru fa	600
+候选词	hou xuan ci	600
+首屏候选	shou ping hou xuan	600
+动态词频	dong tai ci pin	600
+负反馈	fu fan kui	600
+软降权	ruan jiang quan	600
+软置顶	ruan zhi ding	600
+短码降噪	duan ma jiang zao	600
+大模型	da mo xing	600
+错拼纠错	cuo pin jiu cuo	600
+上下文调序	shang xia wen tiao xu	600
+首屏守门	shou ping shou men	600
+多模态	duo mo tai	600
+生僻候选	sheng pi hou xuan	600
+上下文工程	shang xia wen gong cheng	600
+繁体候选	fan ti hou xuan	600
+提示词	ti shi ci	600
+提示词工程	ti shi ci gong cheng	600
+智能体	zhi neng ti	600
+工作流	gong zuo liu	600
+知识库	zhi shi ku	600
+向量数据库	xiang liang shu ju ku	600
+检索增强生成	jian suo zeng qiang sheng cheng	600
+语义搜索	yu yi sou suo	600
+长上下文	chang shang xia wen	600
+上下文窗口	shang xia wen chuang kou	600
+工具调用	gong ju diao yong	600
+函数调用	han shu diao yong	600
+结构化输出	jie gou hua shu chu	600
+流式输出	liu shi shu chu	600
+模型路由	mo xing lu you	600
+模型评测	mo xing ping ce	600
+幻觉率	huan jue lv	600
+微调	wei tiao	600
+蒸馏	zheng liu	600
+对齐	dui qi	600
+推理模型	tui li mo xing	600
+视觉语言模型	shi jue yu yan mo xing	600
+端侧模型	duan ce mo xing	600
+云端模型	yun duan mo xing	600
+本地模型	ben di mo xing	600
+开源模型	kai yuan mo xing	600
+闭源模型	bi yuan mo xing	600
+知识蒸馏	zhi shi zheng liu	600
+人机协作	ren ji xie zuo	600
+语音转文字	yu yin zhuan wen zi	600
+文字转语音	wen zi zhuan yu yin	600
+截图识别	jie tu shi bie	600
+图片转文字	tu pian zhuan wen zi	600
+候选排序	hou xuan pai xu	600
+候选降权	hou xuan jiang quan	600
+一键降权	yi jian jiang quan	600
+场景模式	chang jing mo shi	600
+聊天模式	liao tian mo shi	600
+写作模式	xie zuo mo shi	600
+代码模式	dai ma mo shi	600
+产品审查	chan pin shen cha	600
+增长实验	zeng zhang shi yan	600
+灰度发布	hui du fa bu	600
+回滚方案	hui gun fang an	600
+验收标准	yan shou biao zhun	600
+熔断条件	rong duan tiao jian	600
+可观测性	ke guan ce xing	600
+链路追踪	lian lu zhui zong	600
+埋点	mai dian	600
+归因	gui yin	600
+留存	liu cun	600
+转化率	zhuan hua lv	600
+首屏	shou ping	600
+冷启动	leng qi dong	600
+热更新	re geng xin	600
+跨端同步	kua duan tong bu	600
+云同步	yun tong bu	600
+端到端	duan dao duan	600
+可回滚	ke hui gun	600
+幂等	mi deng	600
+原子写入	yuan zi xie ru	600
+最小权限	zui xiao quan xian	600
+隐私边界	yin si bian jie	600
+本地优先	ben di you xian	600
+离线可用	li xian ke yong	600
+输入体验	shu ru ti yan	600
+搜狗感	sou gou gan	600
+雾凇拼音	wu song pin yin	600
+鼠须管	shu xu guan	600
+中英混输	zhong ying hun shu	600
+模糊音	mo hu yin	600
+简拼	jian pin	600
+自定义短语	zi ding yi duan yu	600
+个人词库	ge ren ci ku	600
+热词	re ci	600
+专业词库	zhuan ye ci ku	600
+AI助手	ai zhu shou	600
+OpenAI	openai	600
+ChatGPT	chatgpt	600
+Codex	codex	600
+Claude	claude	600
+Gemini	gemini	600
+DeepSeek	deepseek	600
+Perplexity	perplexity	600
+Cursor	cursor	600
+Raycast	raycast	600
+Obsidian	obsidian	600
+Rime	rime	600
+Squirrel	squirrel	600
+Lua	lua	600
+TypeScript	typescript	600
+JavaScript	javascript	600
+Python	python	600
+SwiftUI	swiftui	600
+Tauri	tauri	600
+Playwright	playwright	600
+Sentry	sentry	600
+Supabase	supabase	600
+Cloudflare	cloudflare	600
+Vercel	vercel	600
+GitHub	github	600
+API	api	600
+SDK	sdk	600
+CLI	cli	600
+MCP	mcp	600

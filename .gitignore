@@ -1,0 +1,24 @@
+.DS_Store
+*.bak
+*.bak.*
+*.tmp
+*.log
+
+# Rime build/runtime output
+build/
+sync/
+*.userdb/
+*.userdb*
+installation.yaml
+user.yaml
+predict.db
+*.gram
+
+# Local learning data. These files are generated on each user's machine.
+context_boost.tsv
+pin_by_select.tsv
+pin_by_select_v2.tsv
+lua/cold_word_drop/runLog.txt
+
+# Local-only private phrases. Keep custom_phrase.txt as a public template.
+custom_phrase.local.txt

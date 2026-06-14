@@ -1,0 +1,6 @@
+*.gram binary
+*.db binary
+*.yaml text eol=lf
+*.lua text eol=lf
+*.txt text eol=lf
+*.tsv text eol=lf
