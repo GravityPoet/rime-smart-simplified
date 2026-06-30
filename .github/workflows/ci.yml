@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4 librime-bin
+
+      - name: Verify Rime package
+        run: LUAC_BIN=luac5.4 ./scripts/verify.sh
