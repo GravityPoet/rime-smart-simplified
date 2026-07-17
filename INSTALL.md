@@ -58,6 +58,8 @@ cd /path/to/rime-smart-simplified && ./scripts/install.sh --no-download-gram
 Backup: none needed
 ```
 
+仓库中的 `custom_phrase.txt` 只是公开模板：首次安装时会复制；目标目录已有该文件时，安装器会明确显示 `Private phrases: preserving existing custom_phrase.txt` 并原样保留，不会覆盖私人短语。
+
 ## Linux
 
 选择你正在使用的 Rime 前端目录：
@@ -103,7 +105,14 @@ Get-ChildItem $repo -File -Filter *.yaml |
   Where-Object { $_.Name -notin @("user.yaml", "installation.yaml") } |
   Copy-Item -Destination $rime -Force
 
-Copy-Item -Path (Join-Path $repo "rime.lua"), (Join-Path $repo "custom_phrase.txt") -Destination $rime -Force
+Copy-Item -Path (Join-Path $repo "rime.lua") -Destination $rime -Force
+
+$customPhrase = Join-Path $rime "custom_phrase.txt"
+if (-not (Test-Path $customPhrase)) {
+  Copy-Item -Path (Join-Path $repo "custom_phrase.txt") -Destination $customPhrase
+} else {
+  Write-Host "Private phrases: preserving existing custom_phrase.txt"
+}
 
 foreach ($dir in @("cn_dicts", "cn_dicts_wanxiang", "en_dicts", "lua", "opencc")) {
   Copy-Item -Path (Join-Path $repo $dir) -Destination $rime -Recurse -Force
@@ -159,9 +168,13 @@ Linux Fcitx5 示例：
 rsync -a ~/.local/share/fcitx5/rime.backup.YYYYMMDD-HHMMSS/ ~/.local/share/fcitx5/rime/
 ```
 
+上下文学习日志首次达到压缩阈值前，会在用户目录自动保留 `context_boost.tsv.bak.pre-journal-v2`（以及存在旧日志时对应的日志备份）。压缩只合并快照与增量日志，不按时间或库大小删除有效学习记录。如需单独回滚学习数据，退出 Rime 前端后将该快照复制回 `context_boost.tsv`，删除 `context_boost.journal.tsv`，再恢复旧版 `lua/context_boost_filter.lua` 并重新部署。
+
 ## 不要提交的本地文件
 
 - `context_boost.tsv`
+- `context_boost.journal.tsv`
+- `context_boost*.bak.*`
 - `pin_by_select.tsv`
 - `pin_by_select_v2.tsv`
 - `predict.db`

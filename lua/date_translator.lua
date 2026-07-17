@@ -8,6 +8,16 @@ local function yield_cand(seg, text)
 end
 
 local M = {}
+local UTC8_OFFSET_SECONDS = 8 * 3600
+
+local function utc8_format(format, current_time)
+    -- 先按 UTC 加八小时，再用 UTC 格式化；这样结果不受宿主系统时区影响。
+    return os.date("!" .. format, current_time + UTC8_OFFSET_SECONDS)
+end
+
+local function utc8_rfc3339(current_time)
+    return utc8_format('%Y-%m-%dT%H:%M:%S', current_time) .. "+08:00"
+end
 
 function M.init(env)
     local config = env.engine.schema.config
@@ -44,12 +54,12 @@ function M.func(input, seg, env)
         yield_cand(seg, '礼拜' .. text)
         yield_cand(seg, '周' .. text)
 
-    -- ISO 8601/RFC 3339 的时间格式 （固定东八区）（示例 2022-01-07T20:42:51+08:00）
+    -- ISO 8601/RFC 3339，固定 UTC+8，不跟随宿主系统时区
     elseif (input == M.datetime) then
         local current_time = os.time()
-        yield_cand(seg, os.date('%Y-%m-%dT%H:%M:%S+08:00', current_time))
-        yield_cand(seg, os.date('%Y-%m-%d %H:%M:%S', current_time))
-        yield_cand(seg, os.date('%Y%m%d%H%M%S', current_time))
+        yield_cand(seg, utc8_rfc3339(current_time))
+        yield_cand(seg, utc8_format('%Y-%m-%d %H:%M:%S', current_time))
+        yield_cand(seg, utc8_format('%Y%m%d%H%M%S', current_time))
 
     -- 时间戳（十位数，到秒，示例 1650861664）
     elseif (input == M.timestamp) then
@@ -68,5 +78,10 @@ function M.func(input, seg, env)
     --     yield(cand)
     -- end
 end
+
+M._test = {
+    utc8_format = utc8_format,
+    utc8_rfc3339 = utc8_rfc3339,
+}
 
 return M

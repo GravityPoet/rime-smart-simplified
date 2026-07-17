@@ -6,6 +6,7 @@ patch:
     - full_shape
     - search_single_char
     - smart_context
+    - smart_normal
     - smart_chat
     - smart_write
     - smart_code

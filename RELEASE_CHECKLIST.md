@@ -4,7 +4,7 @@
 - [ ] `./scripts/verify.sh` 本地通过。
 - [ ] GitHub Actions `CI` 在目标分支通过。
 - [ ] 用自己的邮箱、手机号、账号名、内部项目名替换下面的占位符后扫描：`rg -n -i "YOUR_HANDLE|YOUR_EMAIL|YOUR_PHONE|YOUR_PRIVATE_PROJECT" .`。
-- [ ] `find . -name "*.bak*" -o -name "*.userdb*" -o -name "predict.db" -o -name "context_boost.tsv" -o -name "pin_by_select*.tsv"` 无运行数据命中。
+- [ ] `find . -name "*.bak*" -o -name "*.userdb*" -o -name "predict.db" -o -name "context_boost*.tsv" -o -name "pin_by_select*.tsv"` 无运行数据命中。
 - [ ] `git ls-files | rg "\.gram$"` 无命中。
 - [ ] 若重新下载了 `wanxiang-lts-zh-hans.gram`，已按 `INSTALL.md` 校验 GitHub Release API 的当前 SHA-256 digest。
 - [ ] 官方许可证链接仍可访问。

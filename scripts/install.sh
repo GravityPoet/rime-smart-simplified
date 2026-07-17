@@ -100,8 +100,10 @@ trap 'rm -f "$MANIFEST"' EXIT
     \( \
       \( -name '*.yaml' ! -name 'user.yaml' ! -name 'installation.yaml' \) \
       -o -name 'rime.lua' \
-      -o -name 'custom_phrase.txt' \
     \)
+  if [ ! -e "$TARGET/custom_phrase.txt" ]; then
+    printf '%s\n' './custom_phrase.txt'
+  fi
   find ./cn_dicts ./cn_dicts_wanxiang ./en_dicts -type f \
     \( -name '*.dict.yaml' -o -name '*.txt' \)
   find ./lua -type f -name '*.lua'
@@ -113,6 +115,11 @@ trap 'rm -f "$MANIFEST"' EXIT
 printf 'Target: %s\n' "$TARGET"
 printf 'Backup decision: overwrite-capable local config install; backup is enabled by default.\n'
 printf 'Files to install: %s\n' "$(wc -l < "$MANIFEST" | tr -d ' ')"
+if [ -e "$TARGET/custom_phrase.txt" ]; then
+  printf 'Private phrases: preserving existing custom_phrase.txt\n'
+else
+  printf 'Private phrases: installing the public custom_phrase.txt template\n'
+fi
 if [ -f "$ROOT/$GRAM_FILE" ]; then
   printf 'Grammar model: will copy local %s\n' "$GRAM_FILE"
 elif [ -f "$TARGET/$GRAM_FILE" ]; then
@@ -187,6 +194,7 @@ fi
 test -f "$TARGET/rime_ice.schema.yaml"
 test -f "$TARGET/rime_ice.dict.yaml"
 test -f "$TARGET/rime.lua"
+test -f "$TARGET/custom_phrase.txt"
 if [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   test -f "$TARGET/$GRAM_FILE"
 fi

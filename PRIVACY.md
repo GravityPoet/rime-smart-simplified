@@ -12,6 +12,8 @@
 
 - `custom_phrase.txt`
 - `context_boost.tsv`
+- `context_boost.journal.tsv`
+- `context_boost*.bak.*`
 - `pin_by_select.tsv`
 - `pin_by_select_v2.tsv`
 - `predict.db`

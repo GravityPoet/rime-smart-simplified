@@ -20,15 +20,10 @@ patch:
       states: [ 上下文关, 上下文 ]
       abbrev: [ 文关, 文 ]
       reset: 1
-    - name: smart_chat
-      states: [ 常规, 聊天 ]
-      abbrev: [ 常, 聊 ]
-    - name: smart_write
-      states: [ 常规, 写作 ]
-      abbrev: [ 常, 写 ]
-    - name: smart_code
-      states: [ 常规, 代码 ]
-      abbrev: [ 常, 码 ]
+    # 场景模式互斥：方案菜单只显示一个入口，避免聊天/写作/代码同时开启。
+    - options: [ smart_normal, smart_chat, smart_write, smart_code ]
+      states: [ 常规, 聊天, 写作, 代码 ]
+      abbrev: [ 常, 聊, 写, 码 ]
 
   engine/processors:
     - predictor

@@ -17,7 +17,9 @@ local CHAT = {
 }
 
 function M.func(input, seg, env)
-  if not env.engine.context:get_option("smart_chat") then return end
+  local context = env.engine.context
+  if context:get_option("smart_code") or context:get_option("smart_write") then return end
+  if not context:get_option("smart_chat") then return end
   local arr = CHAT[string.lower(input)]
   if not arr then return end
   for i = 1, #arr do

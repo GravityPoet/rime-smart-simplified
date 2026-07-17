@@ -61,15 +61,18 @@ function M.func(input, env)
   local primary = {}
   local boosted = {}
   local rest = {}
+  -- 互斥 options 是主防线；这里保留确定性优先级，兼容升级前可能遗留的
+  -- 多个 true 状态，避免不同模式的提升规则混在一起。
+  local active_mode = code_mode and "code" or (write_mode and "write" or "chat")
 
   for i, cand in ipairs(cands) do
     local text = cand.text or ""
     local hit = false
-    if code_mode and is_ascii_like(text) then hit = true end
-    if write_mode and is_long_chinese(text) then hit = true end
-    if chat_mode and is_emoji_like(text) then hit = true end
+    if active_mode == "code" then hit = is_ascii_like(text) end
+    if active_mode == "write" then hit = is_long_chinese(text) end
+    if active_mode == "chat" then hit = is_emoji_like(text) end
 
-    if code_mode then
+    if active_mode == "code" then
       if hit then table.insert(boosted, cand) else table.insert(rest, cand) end
     else
       if i == 1 then

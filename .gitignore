@@ -16,6 +16,7 @@ predict.db
 
 # Local learning data. These files are generated on each user's machine.
 context_boost.tsv
+context_boost.journal.tsv
 pin_by_select.tsv
 pin_by_select_v2.tsv
 lua/cold_word_drop/runLog.txt

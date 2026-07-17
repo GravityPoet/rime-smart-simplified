@@ -3,8 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LUAC_BIN="${LUAC_BIN:-}"
+LUA_BIN="${LUA_BIN:-}"
 TMP_MANIFEST_DIR=""
 TMP_RIME_DIR=""
+TMP_BEHAVIOR_DIR=""
 
 cleanup() {
   rm -f \
@@ -18,6 +20,9 @@ cleanup() {
   fi
   if [ -n "$TMP_MANIFEST_DIR" ]; then
     rm -rf "$TMP_MANIFEST_DIR"
+  fi
+  if [ -n "$TMP_BEHAVIOR_DIR" ]; then
+    rm -rf "$TMP_BEHAVIOR_DIR"
   fi
 }
 trap cleanup EXIT
@@ -41,6 +46,38 @@ find_luac() {
 
   printf 'No luac binary found. Install Lua or set LUAC_BIN.\n' >&2
   exit 1
+}
+
+find_lua() {
+  if [ -n "$LUA_BIN" ]; then
+    command -v "$LUA_BIN" >/dev/null 2>&1 || {
+      printf 'Configured LUA_BIN is not available: %s\n' "$LUA_BIN" >&2
+      exit 1
+    }
+    printf '%s\n' "$LUA_BIN"
+    return
+  fi
+
+  for candidate in lua lua5.4 lua5.3 lua5.2 lua5.1; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
+  printf 'No lua binary found. Install Lua or set LUA_BIN.\n' >&2
+  exit 1
+}
+
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    printf 'Neither shasum nor sha256sum is available; cannot hash %s\n' "$1" >&2
+    exit 1
+  fi
 }
 
 assert_not_in_manifest() {
@@ -74,6 +111,11 @@ LUAC_RESOLVED="$(find_luac)"
 find "$ROOT/lua" -name '*.lua' -print0 | xargs -0 "$LUAC_RESOLVED" -p
 "$LUAC_RESOLVED" -p "$ROOT/rime.lua"
 
+printf 'Checking Lua behavior...\n'
+LUA_RESOLVED="$(find_lua)"
+TMP_BEHAVIOR_DIR="$(mktemp -d)"
+TZ=Asia/Tokyo "$LUA_RESOLVED" "$ROOT/tests/lua_behavior_test.lua" "$ROOT" "$TMP_BEHAVIOR_DIR"
+
 printf 'Checking install manifest allow-list...\n'
 mkdir -p "$ROOT/.codegraph" "$ROOT/docs"
 touch \
@@ -88,8 +130,20 @@ MANIFEST_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" 
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.schema\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.dict\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime\.lua$'
+assert_in_manifest "$MANIFEST_OUTPUT" '^custom_phrase\.txt$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^lua/.+\.lua$'
 assert_not_in_manifest "$MANIFEST_OUTPUT" '(^user\.yaml$|^installation\.yaml$|runLog\.txt|^\.codegraph/|^docs/)'
+
+printf 'Checking private phrase preservation...\n'
+cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/custom_phrase.txt"
+PRIVATE_PHRASE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+PRESERVE_DRY_RUN="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --dry-run --no-download-gram)"
+assert_not_in_manifest "$PRESERVE_DRY_RUN" '^custom_phrase\.txt$'
+printf '%s\n' "$PRESERVE_DRY_RUN" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
+PRESERVE_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --no-download-gram)"
+printf '%s\n' "$PRESERVE_OUTPUT" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
+PRIVATE_PHRASE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+test "$PRIVATE_PHRASE_BEFORE" = "$PRIVATE_PHRASE_AFTER"
 
 if [ "${SKIP_NETWORK_CHECK:-0}" != "1" ]; then
   printf 'Checking GitHub Release digest parser...\n'

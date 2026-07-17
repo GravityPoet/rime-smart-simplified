@@ -1,11 +1,13 @@
 -- 本地上下文调序：学习最近 1/2/3 段上屏文本 -> 下一段候选的稳定搭配。
 -- 只提升已经存在的候选，不联网、不生成新词，避免云输入式隐私风险。
--- 性能：重排只物化前 REORDER_CAP 个候选；保存节流；加载时清理长期未用的一次性记录。
+-- 持久化使用“小型增量日志 + 周期性原子压缩”，避免频繁重写整个学习库。
 
 local M = {}
 
 local DATA_FILE = "context_boost.tsv"
-local K = 8
+local JOURNAL_FILE = "context_boost.journal.tsv"
+local MIGRATION_BACKUP_SUFFIX = ".bak.pre-journal-v2"
+local BOOST_LIMIT_PER_CONTEXT = 8
 local MAX_TEXT_LEN = 24
 local MIN_COUNT = 2
 local HISTORY_LIMIT = 3
@@ -13,13 +15,24 @@ local CONTEXT_SEP = " > "
 local REORDER_CAP = 100
 local SAVE_PENDING_MAX = 3
 local SAVE_INTERVAL = 30
-local PRUNE_AGE_SECONDS = 90 * 86400  -- 超过 90 天未再出现且未达 MIN_COUNT 的记录，加载时丢弃
+local SESSION_GAP_SECONDS = 5 * 60
+local JOURNAL_COMPACT_ROWS = 2048
+local JOURNAL_COMPACT_BYTES = 256 * 1024
+local CONTEXT_WEIGHTS = { [1] = 1.0, [2] = 2.25, [3] = 4.0 }
+local SESSION_TOUCH_BONUS = 0.75
+local LOG_2 = math.log(2)
 
 local data_path
+local journal_path
 local map = {}
 local history = {}
+local session_touched = {}
+local dirty_keys = {}
 local pending_saves = 0
 local last_save_time = 0
+local last_commit_time = 0
+local journal_rows = 0
+local has_malformed_records = false
 
 local function split_tab(line)
   local t = {}
@@ -54,8 +67,10 @@ end
 
 local function parse_item(col)
   local count, last, text = col:match("^(%d+):(%d+):(.*)$")
-  if not text or text == "" then return nil end
-  return { text = text, count = tonumber(count) or 1, last = tonumber(last) or 0 }
+  count = tonumber(count)
+  last = tonumber(last)
+  if not text or text == "" or not count or count < 1 or not last or last < 0 then return nil end
+  return { text = text, count = count, last = last }
 end
 
 local function sort_items(arr)
@@ -66,90 +81,287 @@ local function sort_items(arr)
   end)
 end
 
-local function trim_items(arr)
-  sort_items(arr)
-  while #arr > K do table.remove(arr) end
+local function recent_bonus(last, now)
+  if not last or last <= 0 then return 0 end
+  local age = math.max(0, now - last)
+  if age <= 10 * 60 then return 0.75 end
+  if age <= 60 * 60 then return 0.60 end
+  if age <= 24 * 60 * 60 then return 0.40 end
+  if age <= 7 * 24 * 60 * 60 then return 0.25 end
+  if age <= 30 * 24 * 60 * 60 then return 0.10 end
+  return 0
 end
 
-local function is_stale(item, now)
-  return item.count < MIN_COUNT
-    and item.last > 0
-    and (now - item.last) > PRUNE_AGE_SECONDS
+local function evidence_score(item, touched, now)
+  local score = math.log(item.count + 1) / LOG_2 + recent_bonus(item.last, now)
+  if touched then score = score + SESSION_TOUCH_BONUS end
+  return score
+end
+
+local function parse_line(line)
+  local cols = split_tab((line or ""):gsub("\r$", ""))
+  local key = cols[1]
+  if not key or key == "" then return nil, nil, true end
+
+  local arr = {}
+  local malformed = false
+  for i = 2, #cols do
+    local item = parse_item(cols[i])
+    if item then
+      arr[#arr + 1] = item
+    else
+      malformed = true
+    end
+  end
+  if #arr == 0 then return nil, nil, true end
+  sort_items(arr)
+  return key, arr, malformed
+end
+
+local function load_file(path, target)
+  local f = io.open(path, "r")
+  if not f then return 0, 0, false end
+  local rows = 0
+  local malformed = 0
+  for line in f:lines() do
+    local key, arr, bad = parse_line(line)
+    if key and arr then
+      target[key] = arr
+      rows = rows + 1
+    end
+    if bad then malformed = malformed + 1 end
+  end
+  f:close()
+  return rows, malformed, true
+end
+
+local function sorted_keys(target)
+  local keys = {}
+  for key, value in pairs(target) do
+    if value == true or (type(value) == "table" and #value > 0) then
+      keys[#keys + 1] = key
+    end
+  end
+  table.sort(keys)
+  return keys
+end
+
+local function write_record(f, key, arr)
+  sort_items(arr)
+  if not f:write(key) then return false end
+  for i = 1, #arr do
+    local item = arr[i]
+    if not f:write("\t", item.count, ":", item.last, ":", item.text) then return false end
+  end
+  return f:write("\n") ~= nil
+end
+
+local function file_exists(path)
+  local f = io.open(path, "rb")
+  if not f then return false end
+  f:close()
+  return true
+end
+
+local function replace_file(source, destination)
+  -- POSIX rename replaces atomically. Some Windows runtimes reject replacing
+  -- an existing destination, so fall back to a recoverable two-rename swap.
+  if os.rename(source, destination) then return true end
+  if not file_exists(destination) then return false end
+
+  local previous = destination .. ".replace-backup"
+  os.remove(previous)
+  if not os.rename(destination, previous) then return false end
+  if os.rename(source, destination) then
+    os.remove(previous)
+    return true
+  end
+  os.rename(previous, destination)
+  return false
+end
+
+local function recover_interrupted_replace(path)
+  local previous = path .. ".replace-backup"
+  if file_exists(path) then
+    if file_exists(previous) then os.remove(previous) end
+  elseif file_exists(previous) then
+    os.rename(previous, path)
+  end
+end
+
+local function write_snapshot(path, target)
+  local tmp_path = path .. ".tmp"
+  local f = io.open(tmp_path, "w")
+  if not f then return false end
+
+  local ok = true
+  local keys = sorted_keys(target)
+  for i = 1, #keys do
+    local key = keys[i]
+    if not write_record(f, key, target[key]) then
+      ok = false
+      break
+    end
+  end
+  if not f:flush() then ok = false end
+  if not f:close() then ok = false end
+
+  if ok and replace_file(tmp_path, path) then return true end
+  os.remove(tmp_path)
+  return false
+end
+
+local function file_size(path)
+  local f = io.open(path, "rb")
+  if not f then return 0 end
+  local size = f:seek("end") or 0
+  f:close()
+  return size
+end
+
+local function copy_file_once(source, destination)
+  if file_exists(destination) then return true end
+  local input = io.open(source, "rb")
+  if not input then return true end
+
+  local tmp_path = destination .. ".tmp"
+  local output = io.open(tmp_path, "wb")
+  if not output then
+    input:close()
+    return false
+  end
+
+  local ok = true
+  while true do
+    local chunk = input:read(64 * 1024)
+    if not chunk then break end
+    if not output:write(chunk) then
+      ok = false
+      break
+    end
+  end
+  input:close()
+  if not output:flush() then ok = false end
+  if not output:close() then ok = false end
+
+  if ok and os.rename(tmp_path, destination) then return true end
+  os.remove(tmp_path)
+  return false
+end
+
+local function ensure_migration_backup()
+  if not copy_file_once(data_path, data_path .. MIGRATION_BACKUP_SUFFIX) then return false end
+  if not copy_file_once(journal_path, journal_path .. MIGRATION_BACKUP_SUFFIX) then return false end
+  return true
+end
+
+local function compact_map()
+  if not write_snapshot(data_path, map) then return false end
+  if file_exists(journal_path) and not os.remove(journal_path) then return false end
+  dirty_keys = {}
+  pending_saves = 0
+  journal_rows = 0
+  has_malformed_records = false
+  last_save_time = os.time()
+  return true
+end
+
+local function append_dirty()
+  local keys = sorted_keys(dirty_keys)
+  if #keys == 0 then
+    pending_saves = 0
+    return true
+  end
+
+  local f = io.open(journal_path, "a")
+  if not f then return false end
+  local ok = true
+  for i = 1, #keys do
+    local key = keys[i]
+    local arr = map[key]
+    if arr and #arr > 0 and not write_record(f, key, arr) then
+      ok = false
+      break
+    end
+  end
+  if not f:flush() then ok = false end
+  if not f:close() then ok = false end
+  if not ok then return false end
+
+  for i = 1, #keys do dirty_keys[keys[i]] = nil end
+  pending_saves = 0
+  journal_rows = journal_rows + #keys
+  last_save_time = os.time()
+  return true
+end
+
+local function maybe_compact()
+  local oversized = journal_rows >= JOURNAL_COMPACT_ROWS
+    or file_size(journal_path) >= JOURNAL_COMPACT_BYTES
+  if not oversized or has_malformed_records then return end
+  if not ensure_migration_backup() then return end
+  compact_map()
+end
+
+local function maybe_save(force)
+  local now = os.time()
+  if pending_saves > 0
+    and (force or pending_saves >= SAVE_PENDING_MAX or (now - last_save_time) >= SAVE_INTERVAL)
+  then
+    if append_dirty() then maybe_compact() end
+  elseif force then
+    maybe_compact()
+  end
 end
 
 local function load_map()
   map = {}
-  local f = io.open(data_path, "r")
-  if not f then return end
-  local now = os.time()
-  for line in f:lines() do
-    local cols = split_tab(line)
-    local prev = cols[1]
-    if prev and prev ~= "" then
-      local arr = {}
-      for i = 2, #cols do
-        local item = parse_item(cols[i])
-        if item and not is_stale(item, now) then arr[#arr + 1] = item end
-      end
-      if #arr > 0 then
-        trim_items(arr)
-        map[prev] = arr
-      end
-    end
-  end
-  f:close()
+  history = {}
+  session_touched = {}
+  dirty_keys = {}
+  pending_saves = 0
+  last_save_time = os.time()
+  last_commit_time = 0
+
+  recover_interrupted_replace(data_path)
+
+  local _, base_malformed = load_file(data_path, map)
+  local loaded_journal_rows, journal_malformed = load_file(journal_path, map)
+  journal_rows = loaded_journal_rows
+  has_malformed_records = (base_malformed + journal_malformed) > 0
+  maybe_compact()
 end
 
-local function save_map()
-  local tmp_path = data_path .. ".tmp"
-  local f = io.open(tmp_path, "w")
-  if not f then return end
-  for prev, arr in pairs(map) do
-    if arr and #arr > 0 then
-      trim_items(arr)
-      f:write(prev)
-      for i = 1, #arr do
-        local item = arr[i]
-        f:write("\t", item.count, ":", item.last, ":", item.text)
-      end
-      f:write("\n")
-    end
-  end
-  f:close()
-  os.rename(tmp_path, data_path)
+local function mark_session_touch(key, text)
+  if not session_touched[key] then session_touched[key] = {} end
+  session_touched[key][text] = true
 end
 
-local function maybe_save(force)
-  if pending_saves == 0 then return end
-  local now = os.time()
-  if force or pending_saves >= SAVE_PENDING_MAX or (now - last_save_time) >= SAVE_INTERVAL then
-    save_map()
-    pending_saves = 0
-    last_save_time = now
-  end
-end
-
-local function record_pair(prev, text)
+local function record_pair(prev, text, now)
   if not map[prev] then map[prev] = {} end
   local arr = map[prev]
-  local now = os.time()
   for i = 1, #arr do
     if arr[i].text == text then
       arr[i].count = arr[i].count + 1
       arr[i].last = now
-      trim_items(arr)
+      sort_items(arr)
+      dirty_keys[prev] = true
+      mark_session_touch(prev, text)
       return
     end
   end
   arr[#arr + 1] = { text = text, count = 1, last = now }
-  trim_items(arr)
+  sort_items(arr)
+  dirty_keys[prev] = true
+  mark_session_touch(prev, text)
 end
 
-local function make_context_key(count)
-  if #history < count then return nil end
+local function make_context_key(source_history, count)
+  if #source_history < count then return nil end
+  if count == 1 then return source_history[#source_history] end
   local parts = {}
-  for i = #history - count + 1, #history do
-    parts[#parts + 1] = history[i]
+  for i = #source_history - count + 1, #source_history do
+    parts[#parts + 1] = source_history[i]
   end
   return "@" .. count .. ":" .. table.concat(parts, CONTEXT_SEP)
 end
@@ -174,23 +386,31 @@ local function is_new_text(cand, yielded)
 end
 
 function M.init(env)
-  data_path = rime_api.get_user_data_dir() .. "/" .. DATA_FILE
+  local user_dir = rime_api.get_user_data_dir()
+  data_path = user_dir .. "/" .. DATA_FILE
+  journal_path = user_dir .. "/" .. JOURNAL_FILE
   load_map()
 
   env.engine.context.commit_notifier:connect(function(ctx)
     local text = learnable(ctx:get_commit_text())
     if not text then return end
-    if #history >= 1 and history[#history] == text then return end
+
+    local now = os.time()
+    if last_commit_time > 0 and (now - last_commit_time) > SESSION_GAP_SECONDS then
+      history = {}
+      session_touched = {}
+    end
+    last_commit_time = now
 
     local changed = false
     if #history >= 1 then
-      record_pair(history[#history], text)
+      record_pair(history[#history], text, now)
       changed = true
     end
     for count = 2, HISTORY_LIMIT do
-      local key = make_context_key(count)
+      local key = make_context_key(history, count)
       if key then
-        record_pair(key, text)
+        record_pair(key, text, now)
         changed = true
       end
     end
@@ -203,40 +423,72 @@ function M.init(env)
   end)
 end
 
-function M.fini(env)
+function M.fini(_)
   maybe_save(true)
 end
 
-local function collect_boosted()
-  local keys = {}
-  for count = HISTORY_LIMIT, 2, -1 do
-    local key = make_context_key(count)
-    if key then keys[#keys + 1] = key end
-  end
-  if #history >= 1 then
-    keys[#keys + 1] = history[#history]
-  end
-
-  local boosted = {}
-  local seen = {}
-  for _, key in ipairs(keys) do
-    local arr = map[key]
+local function rank_boosted(target, source_history, touched_map, now)
+  local aggregate = {}
+  for depth = HISTORY_LIMIT, 1, -1 do
+    local key = make_context_key(source_history, depth)
+    local arr = key and target[key]
     if arr then
-      local eligible = {}
+      local ranked = {}
+      local touched_for_key = touched_map[key] or {}
       for i = 1, #arr do
-        if arr[i].count >= MIN_COUNT and not seen[arr[i].text] then
-          eligible[#eligible + 1] = arr[i]
-          seen[arr[i].text] = true
+        local item = arr[i]
+        local touched = touched_for_key[item.text] == true
+        if item.count >= MIN_COUNT or touched then
+          ranked[#ranked + 1] = {
+            item = item,
+            evidence = evidence_score(item, touched, now),
+          }
         end
       end
-      sort_items(eligible)
-      for i = 1, #eligible do
-        boosted[#boosted + 1] = eligible[i]
+      table.sort(ranked, function(a, b)
+        if a.evidence ~= b.evidence then return a.evidence > b.evidence end
+        if a.item.count ~= b.item.count then return a.item.count > b.item.count end
+        if a.item.last ~= b.item.last then return a.item.last > b.item.last end
+        return a.item.text < b.item.text
+      end)
+
+      local limit = math.min(#ranked, BOOST_LIMIT_PER_CONTEXT)
+      for i = 1, limit do
+        local item = ranked[i].item
+        local score = ranked[i].evidence * CONTEXT_WEIGHTS[depth]
+        local existing = aggregate[item.text]
+        if existing then
+          existing.score = existing.score + score
+          existing.best_depth = math.max(existing.best_depth, depth)
+          existing.count = math.max(existing.count, item.count)
+          existing.last = math.max(existing.last, item.last)
+        else
+          aggregate[item.text] = {
+            text = item.text,
+            score = score,
+            best_depth = depth,
+            count = item.count,
+            last = item.last,
+          }
+        end
       end
     end
   end
 
+  local boosted = {}
+  for _, item in pairs(aggregate) do boosted[#boosted + 1] = item end
+  table.sort(boosted, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    if a.best_depth ~= b.best_depth then return a.best_depth > b.best_depth end
+    if a.count ~= b.count then return a.count > b.count end
+    if a.last ~= b.last then return a.last > b.last end
+    return a.text < b.text
+  end)
   return boosted
+end
+
+local function collect_boosted()
+  return rank_boosted(map, history, session_touched, os.time())
 end
 
 function M.func(input, env)
@@ -252,7 +504,6 @@ function M.func(input, env)
     return
   end
 
-  -- 只物化前 REORDER_CAP 个候选参与重排，之后的候选保持流式输出
   local cache = {}
   local flushed = false
   local yielded = {}
@@ -280,11 +531,19 @@ function M.func(input, env)
         flush_cache()
         flushed = true
       end
-    else
-      if is_new_text(cand, yielded) then yield(cand) end
+    elseif is_new_text(cand, yielded) then
+      yield(cand)
     end
   end
   if not flushed then flush_cache() end
 end
+
+M._test = {
+  load_file = load_file,
+  parse_line = parse_line,
+  rank_boosted = rank_boosted,
+  recent_bonus = recent_bonus,
+  write_snapshot = write_snapshot,
+}
 
 return M
