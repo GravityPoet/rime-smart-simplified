@@ -132,18 +132,37 @@ assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.dict\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime\.lua$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^custom_phrase\.txt$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^lua/.+\.lua$'
+assert_in_manifest "$MANIFEST_OUTPUT" '^lua/cold_word_drop/drop_words\.lua$'
+assert_in_manifest "$MANIFEST_OUTPUT" '^lua/cold_word_drop/hide_words\.lua$'
+assert_in_manifest "$MANIFEST_OUTPUT" '^lua/cold_word_drop/reduce_freq_words\.lua$'
 assert_not_in_manifest "$MANIFEST_OUTPUT" '(^user\.yaml$|^installation\.yaml$|runLog\.txt|^\.codegraph/|^docs/)'
 
-printf 'Checking private phrase preservation...\n'
+printf 'Checking private phrase and cold-word preference preservation...\n'
 cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/custom_phrase.txt"
+mkdir -p "$TMP_MANIFEST_DIR/lua/cold_word_drop"
+cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua"
+cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua"
+cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua"
 PRIVATE_PHRASE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+COLD_DROP_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua")"
+COLD_HIDE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua")"
+COLD_REDUCE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua")"
 PRESERVE_DRY_RUN="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --dry-run --no-download-gram)"
 assert_not_in_manifest "$PRESERVE_DRY_RUN" '^custom_phrase\.txt$'
+assert_not_in_manifest "$PRESERVE_DRY_RUN" '^lua/cold_word_drop/(drop|hide|reduce_freq)_words\.lua$'
 printf '%s\n' "$PRESERVE_DRY_RUN" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
+printf '%s\n' "$PRESERVE_DRY_RUN" | grep 'Cold-word preferences: preserving existing hide/drop/reduce records' >/dev/null
 PRESERVE_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --no-download-gram)"
 printf '%s\n' "$PRESERVE_OUTPUT" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
+printf '%s\n' "$PRESERVE_OUTPUT" | grep 'Cold-word preferences: preserving existing hide/drop/reduce records' >/dev/null
 PRIVATE_PHRASE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+COLD_DROP_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua")"
+COLD_HIDE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua")"
+COLD_REDUCE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua")"
 test "$PRIVATE_PHRASE_BEFORE" = "$PRIVATE_PHRASE_AFTER"
+test "$COLD_DROP_BEFORE" = "$COLD_DROP_AFTER"
+test "$COLD_HIDE_BEFORE" = "$COLD_HIDE_AFTER"
+test "$COLD_REDUCE_BEFORE" = "$COLD_REDUCE_AFTER"
 
 if [ "${SKIP_NETWORK_CHECK:-0}" != "1" ]; then
   printf 'Checking GitHub Release digest parser...\n'
@@ -188,5 +207,11 @@ test -f "$TMP_RIME_DIR/build/rime_ice.schema.yaml"
 test -f "$TMP_RIME_DIR/build/rime_ice.table.bin"
 test -f "$TMP_RIME_DIR/build/melt_eng.table.bin"
 test -f "$TMP_RIME_DIR/build/radical_pinyin.table.bin"
+grep 'name: prediction' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep 'max_candidates: 9' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep 'max_iterations: 2' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep 'simplifier@prediction_simplify' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep 'opencc_config: t2s.json' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep -- '- uniquifier' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 
 printf 'Verification passed.\n'

@@ -75,6 +75,14 @@ function filter.func(input, env)
 	local reduce_freq_words = env.reduce_freq_words
 	local now = os.time()
 
+	-- 新安装或尚未记录负反馈时，直接流式通过，避免每次按键都对候选做
+	-- gsub、线性查找和临时表分配。按下隐藏/降频快捷键后表会立刻变为非空，
+	-- 下一次刷新自然进入完整过滤路径，无需重载方案。
+	if next(drop_words) == nil and next(hide_words) == nil and next(reduce_freq_words) == nil then
+		for cand in input:iter() do yield(cand) end
+		return
+	end
+
 	for cand in input:iter() do
 		local cand_text = cand.text:gsub(" ", "")
 		local preedit_code = ((cand.preedit and cand.preedit ~= "") and cand.preedit or preedit_str):gsub(" ", "")

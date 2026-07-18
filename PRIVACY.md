@@ -16,6 +16,9 @@
 - `context_boost*.bak.*`
 - `pin_by_select.tsv`
 - `pin_by_select_v2.tsv`
+- `lua/cold_word_drop/drop_words.lua`
+- `lua/cold_word_drop/hide_words.lua`
+- `lua/cold_word_drop/reduce_freq_words.lua`
 - `predict.db`
 - `*.userdb/`
 - `sync/`

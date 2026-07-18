@@ -16,6 +16,10 @@ patch:
     - name: search_single_char
       states: [ 正常, 单字 ]
       abbrev: [ 词, 单 ]
+    - name: prediction
+      states: [ 预测关, 预测 ]
+      abbrev: [ 预关, 预 ]
+      reset: 1
     - name: smart_context
       states: [ 上下文关, 上下文 ]
       abbrev: [ 文关, 文 ]
@@ -66,6 +70,7 @@ patch:
     - lua_filter@*long_word_filter
     - lua_filter@*reduce_english_filter
     - simplifier@emoji
+    - simplifier@prediction_simplify
     - lua_filter@smart_mode_filter
     - lua_filter@context_boost_filter
     - simplifier@traditionalize
@@ -74,6 +79,7 @@ patch:
     - lua_filter@short_code_clean_filter
     - lua_filter@cold_word_drop_filter
     - lua_filter@rq_date_first_filter
+    - uniquifier
 
   # 搜狗感增强：只保留高收益模糊音，避免过宽容错导致候选噪声暴涨
   speller/algebra:
@@ -173,10 +179,22 @@ patch:
   # === 5. 预测输入（Sogou 感最强之一） ===
   predictor:
     db: predict.db
+    # 与 9 个首屏候选对齐；官方默认 0 会枚举全部预测结果。
+    max_candidates: 9
+    # 允许再选一次预测词形成短链，随后自动停止，避免无边界连续联想。
+    max_iterations: 2
+
+  # predict.db 使用繁体数据；先固定转为简体，再交给上下文调序和可选繁体开关。
+  prediction_simplify:
+    option_name: prediction
+    opencc_config: t2s.json
+    tags: [ prediction ]
+    tips: none
+  "traditionalize/tags": [ abc, number, gregorian_to_lunar, prediction ]
 
   predict_translator:
     db: predict.db
-    limit: 5
+    limit: 9
   # 重复上次上屏：单击 z 首选刚上屏的内容（history_translator，librime 内置）
   history:
     input: z

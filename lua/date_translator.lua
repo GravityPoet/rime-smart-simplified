@@ -19,6 +19,11 @@ local function utc8_rfc3339(current_time)
     return utc8_format('%Y-%m-%dT%H:%M:%S', current_time) .. "+08:00"
 end
 
+local function utc8_weekday(current_time)
+    local week_tab = {'日', '一', '二', '三', '四', '五', '六'}
+    return week_tab[tonumber(utc8_format('%w', current_time)) + 1]
+end
+
 function M.init(env)
     local config = env.engine.schema.config
     env.name_space = env.name_space:gsub('^*', '')
@@ -33,23 +38,22 @@ function M.func(input, seg, env)
     -- 日期
     if (input == M.date) then
         local current_time = os.time()
-        yield_cand(seg, os.date('%Y-%m-%d', current_time))
-        yield_cand(seg, os.date('%Y/%m/%d', current_time))
-        yield_cand(seg, os.date('%Y.%m.%d', current_time))
-        yield_cand(seg, os.date('%Y%m%d', current_time))
-        yield_cand(seg, os.date('%Y年%m月%d日', current_time):gsub('年0', '年'):gsub('月0','月'))
+        yield_cand(seg, utc8_format('%Y-%m-%d', current_time))
+        yield_cand(seg, utc8_format('%Y/%m/%d', current_time))
+        yield_cand(seg, utc8_format('%Y.%m.%d', current_time))
+        yield_cand(seg, utc8_format('%Y%m%d', current_time))
+        yield_cand(seg, utc8_format('%Y年%m月%d日', current_time):gsub('年0', '年'):gsub('月0','月'))
 
     -- 时间
     elseif (input == M.time) then
         local current_time = os.time()
-        yield_cand(seg, os.date('%H:%M', current_time))
-        yield_cand(seg, os.date('%H:%M:%S', current_time))
+        yield_cand(seg, utc8_format('%H:%M', current_time))
+        yield_cand(seg, utc8_format('%H:%M:%S', current_time))
 
     -- 星期
     elseif (input == M.week) then
         local current_time = os.time()
-        local week_tab = {'日', '一', '二', '三', '四', '五', '六'}
-        local text = week_tab[tonumber(os.date('%w', current_time) + 1)]
+        local text = utc8_weekday(current_time)
         yield_cand(seg, '星期' .. text)
         yield_cand(seg, '礼拜' .. text)
         yield_cand(seg, '周' .. text)
@@ -82,6 +86,7 @@ end
 M._test = {
     utc8_format = utc8_format,
     utc8_rfc3339 = utc8_rfc3339,
+    utc8_weekday = utc8_weekday,
 }
 
 return M

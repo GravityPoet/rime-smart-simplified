@@ -58,7 +58,7 @@ cd /path/to/rime-smart-simplified && ./scripts/install.sh --no-download-gram
 Backup: none needed
 ```
 
-仓库中的 `custom_phrase.txt` 只是公开模板：首次安装时会复制；目标目录已有该文件时，安装器会明确显示 `Private phrases: preserving existing custom_phrase.txt` 并原样保留，不会覆盖私人短语。
+仓库中的 `custom_phrase.txt` 和三个 `lua/cold_word_drop/*_words.lua` 只是公开模板：首次安装时会复制；目标目录已有这些文件时，安装器会原样保留，不会覆盖私人短语或冷词隐藏、删除、软降频记录。
 
 ## Linux
 
@@ -114,8 +114,24 @@ if (-not (Test-Path $customPhrase)) {
   Write-Host "Private phrases: preserving existing custom_phrase.txt"
 }
 
+$coldState = @{}
+foreach ($rel in @(
+  "lua\cold_word_drop\drop_words.lua",
+  "lua\cold_word_drop\hide_words.lua",
+  "lua\cold_word_drop\reduce_freq_words.lua"
+)) {
+  $path = Join-Path $rime $rel
+  if (Test-Path $path) {
+    $coldState[$rel] = [System.IO.File]::ReadAllBytes($path)
+  }
+}
+
 foreach ($dir in @("cn_dicts", "cn_dicts_wanxiang", "en_dicts", "lua", "opencc")) {
   Copy-Item -Path (Join-Path $repo $dir) -Destination $rime -Recurse -Force
+}
+
+foreach ($rel in $coldState.Keys) {
+  [System.IO.File]::WriteAllBytes((Join-Path $rime $rel), $coldState[$rel])
 }
 ```
 

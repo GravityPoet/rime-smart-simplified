@@ -74,6 +74,31 @@ test("RFC3339 stays fixed at UTC+8 regardless of host timezone", function()
   local module = require("date_translator")
   expect_equal(module._test.utc8_rfc3339(0), "1970-01-01T08:00:00+08:00")
   expect_equal(module._test.utc8_format('%Y-%m-%d %H:%M:%S', 0), "1970-01-01 08:00:00")
+  expect_equal(module._test.utc8_weekday(0), "四")
+end)
+
+test("date time and week translators all use fixed UTC+8", function()
+  package.loaded.date_translator = nil
+  local module = require("date_translator")
+  local config = { get_string = function() return nil end }
+  local env = { name_space = "date_translator", engine = { schema = { config = config } } }
+  module.init(env)
+
+  local old_time = os.time
+  os.time = function() return 0 end
+  local ok, outputs = pcall(function()
+    return {
+      date = collect(function() module.func("rq", { start = 0, _end = 2 }, env) end),
+      time = collect(function() module.func("sj", { start = 0, _end = 2 }, env) end),
+      week = collect(function() module.func("xq", { start = 0, _end = 2 }, env) end),
+    }
+  end)
+  os.time = old_time
+  if not ok then error(outputs) end
+
+  expect_equal(outputs.date[1].text, "1970-01-01")
+  expect_equal(outputs.time[1].text, "08:00")
+  expect_equal(outputs.week[1].text, "星期四")
 end)
 
 test("datetime translator emits RFC3339 first", function()
@@ -405,16 +430,25 @@ test("context learns intentional repeated commits", function()
   os.remove(journal_path)
 end)
 
-test("rq filter keeps ISO date first without dropping candidates", function()
+test("date trigger filter keeps each dynamic result first without dropping candidates", function()
   package.loaded.rq_date_first_filter = nil
   local module = require("rq_date_first_filter")
-  local env = { engine = { context = fake_context({}, "RQ") } }
-  local output = collect(function()
-    module.func(input_from({ candidate("日期"), candidate("2026-07-18"), candidate("其他") }), env)
-  end)
-  expect_equal(output[1].text, "2026-07-18")
-  expect_equal(output[2].text, "日期")
-  expect_equal(output[3].text, "其他")
+  local cases = {
+    { code = "RQ", expected = "2026-07-18", candidates = { "日期", "2026-07-18", "其他" } },
+    { code = "s j", expected = "14:30", candidates = { "时间", "14:30:01", "14:30", "其他" } },
+    { code = "xq", expected = "星期六", candidates = { "小区", "周六", "星期六", "其他" } },
+    { code = "dt", expected = "2026-07-18T14:30:01+08:00",
+      candidates = { "动态", "2026-07-18 14:30:01", "2026-07-18T14:30:01+08:00", "其他" } },
+  }
+
+  for _, case in ipairs(cases) do
+    local env = { engine = { context = fake_context({}, case.code) } }
+    local candidates = {}
+    for i, text in ipairs(case.candidates) do candidates[i] = candidate(text) end
+    local output = collect(function() module.func(input_from(candidates), env) end)
+    expect_equal(output[1].text, case.expected, case.code .. " should promote its dynamic result")
+    expect_equal(#output, #case.candidates, case.code .. " must preserve candidate count")
+  end
 end)
 
 if failed > 0 then

@@ -106,7 +106,19 @@ trap 'rm -f "$MANIFEST"' EXIT
   fi
   find ./cn_dicts ./cn_dicts_wanxiang ./en_dicts -type f \
     \( -name '*.dict.yaml' -o -name '*.txt' \)
-  find ./lua -type f -name '*.lua'
+  find ./lua -type f -name '*.lua' \
+    ! -path './lua/cold_word_drop/drop_words.lua' \
+    ! -path './lua/cold_word_drop/hide_words.lua' \
+    ! -path './lua/cold_word_drop/reduce_freq_words.lua'
+  for rel in \
+    lua/cold_word_drop/drop_words.lua \
+    lua/cold_word_drop/hide_words.lua \
+    lua/cold_word_drop/reduce_freq_words.lua
+  do
+    if [ ! -e "$TARGET/$rel" ]; then
+      printf './%s\n' "$rel"
+    fi
+  done
   find ./opencc -type f \( -name '*.json' -o -name '*.txt' \)
 } \
   | sed 's#^\./##' \
@@ -119,6 +131,14 @@ if [ -e "$TARGET/custom_phrase.txt" ]; then
   printf 'Private phrases: preserving existing custom_phrase.txt\n'
 else
   printf 'Private phrases: installing the public custom_phrase.txt template\n'
+fi
+if [ -e "$TARGET/lua/cold_word_drop/drop_words.lua" ] \
+  || [ -e "$TARGET/lua/cold_word_drop/hide_words.lua" ] \
+  || [ -e "$TARGET/lua/cold_word_drop/reduce_freq_words.lua" ]
+then
+  printf 'Cold-word preferences: preserving existing hide/drop/reduce records\n'
+else
+  printf 'Cold-word preferences: installing empty templates\n'
 fi
 if [ -f "$ROOT/$GRAM_FILE" ]; then
   printf 'Grammar model: will copy local %s\n' "$GRAM_FILE"
@@ -195,6 +215,9 @@ test -f "$TARGET/rime_ice.schema.yaml"
 test -f "$TARGET/rime_ice.dict.yaml"
 test -f "$TARGET/rime.lua"
 test -f "$TARGET/custom_phrase.txt"
+test -f "$TARGET/lua/cold_word_drop/drop_words.lua"
+test -f "$TARGET/lua/cold_word_drop/hide_words.lua"
+test -f "$TARGET/lua/cold_word_drop/reduce_freq_words.lua"
 if [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   test -f "$TARGET/$GRAM_FILE"
 fi
