@@ -12,6 +12,9 @@ local MAX_TEXT_LEN = 24
 local MIN_COUNT = 2
 local HISTORY_LIMIT = 3
 local CONTEXT_SEP = " > "
+-- 只读取前一小段候选。Lua filter 的迭代器是惰性的，若在无提升记录时
+-- 把整条流读完，会迫使万象语法把几百/几千个候选全部算出，造成明显卡顿。
+-- 100 个候选可覆盖约 11 页常用长尾，同时给上下文排序留足命中空间。
 local REORDER_CAP = 100
 local SAVE_PENDING_MAX = 3
 local SAVE_INTERVAL = 30
@@ -118,6 +121,41 @@ local function parse_line(line)
   return key, arr, malformed
 end
 
+local function valid_item_column(col)
+  local count, last, text = col:match("^(%d+):(%d+):(.*)$")
+  count = tonumber(count)
+  last = tonumber(last)
+  return text ~= nil and text ~= "" and count ~= nil and count >= 1 and last ~= nil and last >= 0
+end
+
+local function parse_compact_line(line)
+  line = (line or ""):gsub("\r$", "")
+  local key, payload = line:match("^([^\t]+)\t(.+)$")
+  if not key or not payload then return nil, nil, true end
+
+  local valid = 0
+  local malformed = false
+  for col in payload:gmatch("([^\t]+)") do
+    if valid_item_column(col) then
+      valid = valid + 1
+    else
+      malformed = true
+    end
+  end
+  if valid == 0 then return nil, nil, true end
+  return key, payload, malformed
+end
+
+local function parse_payload(payload)
+  local arr = {}
+  for col in (payload or ""):gmatch("([^\t]+)") do
+    local item = parse_item(col)
+    if item then arr[#arr + 1] = item end
+  end
+  sort_items(arr)
+  return arr
+end
+
 local function load_file(path, target)
   local f = io.open(path, "r")
   if not f then return 0, 0, false end
@@ -135,10 +173,38 @@ local function load_file(path, target)
   return rows, malformed, true
 end
 
+local function load_compact_file(path, target)
+  local f = io.open(path, "r")
+  if not f then return 0, 0, false end
+  local rows = 0
+  local malformed = 0
+  for line in f:lines() do
+    local key, payload, bad = parse_compact_line(line)
+    if key and payload then
+      -- 未命中的 99%+ 上下文保持紧凑字符串；只有真正使用时才展开为 Lua 表。
+      target[key] = payload
+      rows = rows + 1
+    end
+    if bad then malformed = malformed + 1 end
+  end
+  f:close()
+  return rows, malformed, true
+end
+
+local function resolve_items(target, key)
+  local value = key and target[key]
+  if type(value) == "table" then return value end
+  if type(value) ~= "string" then return nil end
+
+  local arr = parse_payload(value)
+  target[key] = arr
+  return arr
+end
+
 local function sorted_keys(target)
   local keys = {}
   for key, value in pairs(target) do
-    if value == true or (type(value) == "table" and #value > 0) then
+    if value == true or type(value) == "string" or (type(value) == "table" and #value > 0) then
       keys[#keys + 1] = key
     end
   end
@@ -147,6 +213,9 @@ local function sorted_keys(target)
 end
 
 local function write_record(f, key, arr)
+  if type(arr) == "string" then
+    return f:write(key, "\t", arr, "\n") ~= nil
+  end
   sort_items(arr)
   if not f:write(key) then return false end
   for i = 1, #arr do
@@ -325,8 +394,8 @@ local function load_map()
 
   recover_interrupted_replace(data_path)
 
-  local _, base_malformed = load_file(data_path, map)
-  local loaded_journal_rows, journal_malformed = load_file(journal_path, map)
+  local _, base_malformed = load_compact_file(data_path, map)
+  local loaded_journal_rows, journal_malformed = load_compact_file(journal_path, map)
   journal_rows = loaded_journal_rows
   has_malformed_records = (base_malformed + journal_malformed) > 0
   maybe_compact()
@@ -338,8 +407,11 @@ local function mark_session_touch(key, text)
 end
 
 local function record_pair(prev, text, now)
-  if not map[prev] then map[prev] = {} end
-  local arr = map[prev]
+  local arr = resolve_items(map, prev)
+  if not arr then
+    arr = {}
+    map[prev] = arr
+  end
   for i = 1, #arr do
     if arr[i].text == text then
       arr[i].count = arr[i].count + 1
@@ -374,7 +446,12 @@ local function push_history(text)
 end
 
 local function pass_through(input)
-  for cand in input:iter() do yield(cand) end
+  local count = 0
+  for cand in input:iter() do
+    yield(cand)
+    count = count + 1
+    if count >= REORDER_CAP then break end
+  end
 end
 
 local function is_new_text(cand, yielded)
@@ -431,7 +508,7 @@ local function rank_boosted(target, source_history, touched_map, now)
   local aggregate = {}
   for depth = HISTORY_LIMIT, 1, -1 do
     local key = make_context_key(source_history, depth)
-    local arr = key and target[key]
+    local arr = resolve_items(target, key)
     if arr then
       local ranked = {}
       local touched_for_key = touched_map[key] or {}
@@ -505,7 +582,6 @@ function M.func(input, env)
   end
 
   local cache = {}
-  local flushed = false
   local yielded = {}
 
   local function flush_cache()
@@ -525,24 +601,22 @@ function M.func(input, env)
   end
 
   for cand in input:iter() do
-    if not flushed then
-      cache[#cache + 1] = cand
-      if #cache >= REORDER_CAP then
-        flush_cache()
-        flushed = true
-      end
-    elseif is_new_text(cand, yielded) then
-      yield(cand)
+    cache[#cache + 1] = cand
+    if #cache >= REORDER_CAP then
+      flush_cache()
+      return
     end
   end
-  if not flushed then flush_cache() end
+  flush_cache()
 end
 
 M._test = {
+  load_compact_file = load_compact_file,
   load_file = load_file,
   parse_line = parse_line,
   rank_boosted = rank_boosted,
   recent_bonus = recent_bonus,
+  resolve_items = resolve_items,
   write_snapshot = write_snapshot,
 }
 

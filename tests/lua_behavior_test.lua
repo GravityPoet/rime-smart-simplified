@@ -147,6 +147,49 @@ test("context snapshot round-trip preserves old singleton seeds", function()
   expect_equal(#loaded["多候选上下文"], 12, "snapshot must not cap stored candidates")
 end)
 
+test("context runtime map keeps untouched learning rows compact", function()
+  package.loaded.context_boost_filter = nil
+  local module = require("context_boost_filter")
+  local path = os.tmpname()
+  local source = {
+    ["当前上下文"] = {
+      { text = "候选一", count = 4, last = 2000000000 },
+      { text = "候选二", count = 2, last = 1999999999 },
+    },
+    ["未命中上下文"] = {
+      { text = "完整保留", count = 1, last = 1 },
+    },
+  }
+  expect(module._test.write_snapshot(path, source), "snapshot write should succeed")
+
+  local compact = {}
+  local rows, malformed, exists = module._test.load_compact_file(path, compact)
+  expect(exists, "compact snapshot should exist")
+  expect_equal(rows, 2)
+  expect_equal(malformed, 0)
+  expect_equal(type(compact["当前上下文"]), "string", "runtime should not eagerly expand every row")
+  expect_equal(type(compact["未命中上下文"]), "string", "untouched learning must stay compact")
+
+  local resolved = module._test.resolve_items(compact, "当前上下文")
+  expect_equal(resolved[1].text, "候选一")
+  expect_equal(resolved[1].count, 4)
+  expect_equal(type(compact["未命中上下文"]), "string", "resolving one key must not expand other learning")
+
+  os.remove(path)
+  os.remove(path .. ".tmp")
+end)
+
+test("context filter bounds lazy candidate enumeration", function()
+  package.loaded.context_boost_filter = nil
+  local module = require("context_boost_filter")
+  local candidates = {}
+  for i = 1, 150 do candidates[i] = candidate("候选" .. i) end
+  local env = { engine = { context = fake_context({ smart_context = false }, "test") } }
+  local output = collect(function() module.func(input_from(candidates), env) end)
+  expect_equal(#output, 100, "filter must not force the whole lazy candidate stream")
+  expect_equal(output[100].text, "候选100")
+end)
+
 test("context one-shot learning is active only in the current session", function()
   package.loaded.context_boost_filter = nil
   local module = require("context_boost_filter")
