@@ -19,7 +19,8 @@ patch:
     - name: prediction
       states: [ 预测关, 预测 ]
       abbrev: [ 预关, 预 ]
-      reset: 1
+      # 自动预测会保持一段候选组合，可能干扰复制、粘贴等系统快捷键；默认关闭，按需临时开启。
+      reset: 0
     - name: smart_context
       states: [ 上下文关, 上下文 ]
       abbrev: [ 文关, 文 ]

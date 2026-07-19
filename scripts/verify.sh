@@ -207,11 +207,16 @@ test -f "$TMP_RIME_DIR/build/rime_ice.schema.yaml"
 test -f "$TMP_RIME_DIR/build/rime_ice.table.bin"
 test -f "$TMP_RIME_DIR/build/melt_eng.table.bin"
 test -f "$TMP_RIME_DIR/build/radical_pinyin.table.bin"
-grep 'name: prediction' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+grep -A1 -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" | grep 'reset: 0' >/dev/null
 grep 'max_candidates: 9' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'max_iterations: 2' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'simplifier@prediction_simplify' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'opencc_config: t2s.json' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep -- '- uniquifier' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
+if sed -n '/^switcher:/,$p' "$TMP_RIME_DIR/build/default.yaml" | grep -E '^[[:space:]]*- prediction$' >/dev/null 2>&1; then
+  printf 'Prediction must not persist across sessions because its active composition interferes with system shortcuts.\n' >&2
+  exit 1
+fi
 
 printf 'Verification passed.\n'

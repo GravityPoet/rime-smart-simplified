@@ -5,7 +5,6 @@ patch:
     - emoji
     - full_shape
     - search_single_char
-    - prediction
     - smart_context
     - smart_normal
     - smart_chat
