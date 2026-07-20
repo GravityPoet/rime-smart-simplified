@@ -36,8 +36,9 @@ not a signed application or installer.
 - Primary path: local verification and archive creation, push `main`, wait for CI,
   push the annotated tag, then create the GitHub Release with archive and checksum
 - Fallback path: if GitHub workflow-list discovery is unavailable, inspect the
-  tracked workflow and use `gh run list`/`gh run watch` by exact commit SHA; do not
-  release while the target commit lacks a successful CI run
+  tracked workflow and query the Actions Runs REST endpoint with `gh api` by exact
+  commit SHA; do not use `gh workflow list` or `gh run list`, because this gh version
+  may resolve workflow metadata through the unavailable workflows-list endpoint
 
 ### Release quality gates
 
@@ -142,11 +143,31 @@ failure details.
 git push origin main
 
 TARGET_SHA="$(git rev-parse HEAD)"
-RUN_ID="$(gh run list --repo GravityPoet/rime-smart-simplified \
-  --commit "$TARGET_SHA" --workflow CI --limit 1 \
-  --json databaseId --jq '.[0].databaseId')"
+RUN_ID="$(gh api --method GET \
+  repos/GravityPoet/rime-smart-simplified/actions/runs \
+  -f head_sha="$TARGET_SHA" -f event=push -f per_page=10 \
+  --jq ".workflow_runs | map(select(.name == \"CI\" and .head_sha == \"$TARGET_SHA\")) | .[0].id // empty")"
 test -n "$RUN_ID"
-gh run watch "$RUN_ID" --repo GravityPoet/rime-smart-simplified --exit-status
+while :; do
+  RUN_STATUS="$(gh api \
+    "repos/GravityPoet/rime-smart-simplified/actions/runs/$RUN_ID" \
+    --jq .status)"
+  case "$RUN_STATUS" in
+    completed)
+      test "$(gh api \
+        "repos/GravityPoet/rime-smart-simplified/actions/runs/$RUN_ID" \
+        --jq .conclusion)" = success
+      break
+      ;;
+    queued|in_progress|waiting|requested|pending)
+      sleep 5
+      ;;
+    *)
+      printf 'Unexpected GitHub Actions run status: %s\n' "$RUN_STATUS" >&2
+      exit 1
+      ;;
+  esac
+done
 
 git tag -a v1.0.0 -m 'v1.0.0'
 git push origin v1.0.0
@@ -202,3 +223,5 @@ gh release download v1.0.0 --repo GravityPoet/rime-smart-simplified \
 | 2026-07-20 | `v1.0.0` | `gh workflow list --repo GravityPoet/rime-smart-simplified --all` | `HTTP 503: No server is currently available to service your request` | GitHub's Actions workflows-list endpoint returned 503 while repository metadata and run-list endpoints remained available | Read `.github/workflows/ci.yml` and use `gh run list`/`gh run watch` against the exact commit | After two identical workflows-list 503 responses, stop retrying that endpoint and use tracked workflow plus exact-SHA run evidence |
 | 2026-07-20 | `v1.0.0` | `gh repo view mirtlecn/rime-lmdg ...`; `gh search repos rime-lmdg --owner mirtlecn ...` | `Could not resolve to a Repository`; `Invalid search query` | The release link check manually reconstructed a URL that was not present in the tracked docs, producing a false first diagnosis | Re-read the source and extract URLs directly with `rg` before validating them | Never hand-copy or infer the input set for a source-link gate |
 | 2026-07-20 | `v1.0.0` | `gh repo view wongstz/rime-lmdg ...` | `Could not resolve to a Repository with the name 'wongstz/rime-lmdg'` | `README.md` retained a stale attribution URL while `INSTALL.md`, `THIRD_PARTY.md`, and the installer already used the live canonical `amzxyz/RIME-LMDG` source | Update the README attribution to `https://github.com/amzxyz/RIME-LMDG` and validate all extracted source URLs | Make source-link validation part of every release preflight and require HTTP 200 after redirects |
+| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --workflow CI ...` | `couldn't fetch workflows ... HTTP 503` | The documented fallback still used `--workflow CI`, which immediately queried the unavailable workflows-list endpoint | Replace the `gh run list` fallback with raw `gh api` calls to the Actions Runs endpoints | A workflows-endpoint fallback must avoid commands that resolve workflow metadata through that endpoint |
+| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --json databaseId,workflowName,event ...` | `failed to get runs ... HTTP 503 ... actions/workflows` | In gh 2.86.0, `gh run list` still queried the workflows-list endpoint without a `--workflow` flag, so the first fallback remained coupled to the outage | Query `repos/.../actions/runs` and `actions/runs/<id>` directly with `gh api`, filtering by exact SHA and workflow name | Use raw Actions Runs REST endpoints when workflows-list discovery is unavailable; do not assume `gh run list` is independent |
