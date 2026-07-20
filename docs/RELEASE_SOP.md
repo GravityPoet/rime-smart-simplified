@@ -35,10 +35,10 @@ not a signed application or installer.
   the tag is pushed
 - Primary path: local verification and archive creation, push `main`, wait for CI,
   push the annotated tag, then create the GitHub Release with archive and checksum
-- Fallback path: if GitHub workflow-list discovery is unavailable, inspect the
-  tracked workflow and query the Actions Runs REST endpoint with `gh api` by exact
-  commit SHA; do not use `gh workflow list` or `gh run list`, because this gh version
-  may resolve workflow metadata through the unavailable workflows-list endpoint
+- CI evidence path: inspect the tracked workflow, then query the commit Check Runs
+  endpoint with `gh api` by exact SHA and require the GitHub Actions `verify` check
+  to complete successfully. Do not use `gh workflow list`, `gh run list`, or the
+  Actions Run Detail endpoint while those endpoints are returning 503
 
 ### Release quality gates
 
@@ -140,34 +140,60 @@ failure details.
 ### GitHub Release
 
 ```bash
+set -euo pipefail
 git push origin main
 
 TARGET_SHA="$(git rev-parse HEAD)"
-RUN_ID="$(gh api --method GET \
-  repos/GravityPoet/rime-smart-simplified/actions/runs \
-  -f head_sha="$TARGET_SHA" -f event=push -f per_page=10 \
-  --jq ".workflow_runs | map(select(.name == \"CI\" and .head_sha == \"$TARGET_SHA\")) | .[0].id // empty")"
-test -n "$RUN_ID"
-while :; do
-  RUN_STATUS="$(gh api \
-    "repos/GravityPoet/rime-smart-simplified/actions/runs/$RUN_ID" \
-    --jq .status)"
-  case "$RUN_STATUS" in
+CI_VERIFIED=0
+API_FAILURES=0
+attempt=1
+while [ "$attempt" -le 30 ]; do
+  if ! CHECK_LINE="$(gh api \
+    -H 'Accept: application/vnd.github+json' \
+    "repos/GravityPoet/rime-smart-simplified/commits/$TARGET_SHA/check-runs" \
+    --jq '[.check_runs[] | select(.name == "verify" and .app.slug == "github-actions")][0] | if . == null then "" else [.status, (.conclusion // ""), .details_url] | @tsv end')"
+  then
+    API_FAILURES=$((API_FAILURES + 1))
+    if [ "$API_FAILURES" -ge 6 ]; then
+      printf 'GitHub Check Runs API failed six consecutive times.\n' >&2
+      exit 1
+    fi
+    sleep 5
+    attempt=$((attempt + 1))
+    continue
+  fi
+
+  API_FAILURES=0
+  if [ -z "$CHECK_LINE" ]; then
+    sleep 5
+    attempt=$((attempt + 1))
+    continue
+  fi
+
+  CHECK_STATUS="$(printf '%s\n' "$CHECK_LINE" | cut -f1)"
+  CHECK_CONCLUSION="$(printf '%s\n' "$CHECK_LINE" | cut -f2)"
+  CHECK_URL="$(printf '%s\n' "$CHECK_LINE" | cut -f3-)"
+  printf 'CI verify: status=%s conclusion=%s url=%s\n' \
+    "$CHECK_STATUS" "$CHECK_CONCLUSION" "$CHECK_URL"
+  case "$CHECK_STATUS" in
     completed)
-      test "$(gh api \
-        "repos/GravityPoet/rime-smart-simplified/actions/runs/$RUN_ID" \
-        --jq .conclusion)" = success
+      if [ "$CHECK_CONCLUSION" != success ]; then
+        exit 1
+      fi
+      CI_VERIFIED=1
       break
       ;;
     queued|in_progress|waiting|requested|pending)
       sleep 5
       ;;
     *)
-      printf 'Unexpected GitHub Actions run status: %s\n' "$RUN_STATUS" >&2
+      printf 'Unexpected GitHub check status: %s\n' "$CHECK_STATUS" >&2
       exit 1
       ;;
   esac
+  attempt=$((attempt + 1))
 done
+test "$CI_VERIFIED" -eq 1
 
 git tag -a v1.0.0 -m 'v1.0.0'
 git push origin v1.0.0
@@ -220,8 +246,9 @@ gh release download v1.0.0 --repo GravityPoet/rime-smart-simplified \
 | Date | Version/Tag | Command | Error Signature | Root Cause | Fix | Prevention |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-07-20 | `v1.0.0` | `gh release list --repo GravityPoet/rime-smart-simplified --limit 30 --json tagName,name,isDraft,isPrerelease,publishedAt,createdAt,url` | `Unknown JSON field: "url"` | `gh release list` in gh 2.86.0 does not expose `url` in its JSON schema | Omit `url`; use `gh release view <tag> --json url,...` once a tag is known | Check the field list reported by `gh` before scripting non-obvious JSON fields |
-| 2026-07-20 | `v1.0.0` | `gh workflow list --repo GravityPoet/rime-smart-simplified --all` | `HTTP 503: No server is currently available to service your request` | GitHub's Actions workflows-list endpoint returned 503 while repository metadata and run-list endpoints remained available | Read `.github/workflows/ci.yml` and use `gh run list`/`gh run watch` against the exact commit | After two identical workflows-list 503 responses, stop retrying that endpoint and use tracked workflow plus exact-SHA run evidence |
+| 2026-07-20 | `v1.0.0` | `gh workflow list --repo GravityPoet/rime-smart-simplified --all` | `HTTP 503: No server is currently available to service your request` | GitHub's Actions workflows-list endpoint returned 503 while repository metadata and commit check-runs remained available | Read `.github/workflows/ci.yml` and query `commits/<sha>/check-runs` for the exact release SHA | After two identical workflows-list 503 responses, stop retrying that endpoint and use exact-SHA check-run evidence |
 | 2026-07-20 | `v1.0.0` | `gh repo view mirtlecn/rime-lmdg ...`; `gh search repos rime-lmdg --owner mirtlecn ...` | `Could not resolve to a Repository`; `Invalid search query` | The release link check manually reconstructed a URL that was not present in the tracked docs, producing a false first diagnosis | Re-read the source and extract URLs directly with `rg` before validating them | Never hand-copy or infer the input set for a source-link gate |
 | 2026-07-20 | `v1.0.0` | `gh repo view wongstz/rime-lmdg ...` | `Could not resolve to a Repository with the name 'wongstz/rime-lmdg'` | `README.md` retained a stale attribution URL while `INSTALL.md`, `THIRD_PARTY.md`, and the installer already used the live canonical `amzxyz/RIME-LMDG` source | Update the README attribution to `https://github.com/amzxyz/RIME-LMDG` and validate all extracted source URLs | Make source-link validation part of every release preflight and require HTTP 200 after redirects |
-| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --workflow CI ...` | `couldn't fetch workflows ... HTTP 503` | The documented fallback still used `--workflow CI`, which immediately queried the unavailable workflows-list endpoint | Replace the `gh run list` fallback with raw `gh api` calls to the Actions Runs endpoints | A workflows-endpoint fallback must avoid commands that resolve workflow metadata through that endpoint |
-| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --json databaseId,workflowName,event ...` | `failed to get runs ... HTTP 503 ... actions/workflows` | In gh 2.86.0, `gh run list` still queried the workflows-list endpoint without a `--workflow` flag, so the first fallback remained coupled to the outage | Query `repos/.../actions/runs` and `actions/runs/<id>` directly with `gh api`, filtering by exact SHA and workflow name | Use raw Actions Runs REST endpoints when workflows-list discovery is unavailable; do not assume `gh run list` is independent |
+| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --workflow CI ...` | `couldn't fetch workflows ... HTTP 503` | The documented fallback still used `--workflow CI`, which immediately queried the unavailable workflows-list endpoint | Replace `gh run list` with exact-SHA commit check-runs evidence | A workflows-endpoint fallback must avoid commands that resolve workflow metadata through that endpoint |
+| 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --json databaseId,workflowName,event ...` | `failed to get runs ... HTTP 503 ... actions/workflows` | In gh 2.86.0, `gh run list` still queried the workflows-list endpoint without a `--workflow` flag, so the first fallback remained coupled to the outage | Query `commits/<sha>/check-runs` and require the `verify` check from `github-actions` to succeed | Do not assume `gh run list` is independent of workflow discovery |
+| 2026-07-20 | `v1.0.0` | `gh api repos/GravityPoet/rime-smart-simplified/actions/runs/29710729304 --jq .status` | `HTTP 503: No server is currently available to service your request` | The raw Actions Run Detail endpoint also returned transient 503 while the commit Check Runs endpoint exposed the completed result | Use `commits/<sha>/check-runs`, with at most six consecutive transport retries, and distinguish API failure from a failed CI conclusion | Tag only after exact-SHA check-run evidence reports `status=completed` and `conclusion=success` |
