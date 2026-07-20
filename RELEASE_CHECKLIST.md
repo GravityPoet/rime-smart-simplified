@@ -9,5 +9,7 @@
 - [ ] 若重新下载了 `wanxiang-lts-zh-hans.gram`，已按 `INSTALL.md` 校验 GitHub Release API 的当前 SHA-256 digest。
 - [ ] 官方许可证链接仍可访问。
 - [ ] macOS 鼠须管重新部署成功。
+- [ ] Release ZIP 解压后包含 `Install-on-macOS.command`、`Install-on-Windows.cmd`、`scripts/install.ps1`。
+- [ ] 客户路径已从“下载 ZIP → 解压 → 运行平台入口 → 重新部署 → 首次输入”走通。
 - [ ] README 没有宣称“完全替代所有商业输入法云能力”。
 - [ ] GitHub 仓库首次发布前使用 private 仓库复核一遍，再改 public。

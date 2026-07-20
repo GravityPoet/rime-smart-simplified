@@ -11,7 +11,7 @@ not a signed application or installer.
 - Repository: `GravityPoet/rime-smart-simplified`
 - GitHub remote: `git@github.com:GravityPoet/rime-smart-simplified.git`
 - Default release branch: `main`
-- Package ecosystem: Rime configuration, Lua extensions, dictionaries, and shell installer
+- Package ecosystem: Rime configuration, Lua extensions, dictionaries, and cross-platform installer entry points
 - Package manager: none
 
 ## Versioning
@@ -48,12 +48,13 @@ not a signed application or installer.
 - Local fixtures/models/services: the release excludes `*.gram`; the installer obtains
   the rolling upstream grammar model and validates its GitHub asset digest
 - Marketed-locale strict i18n: not applicable; this package has no localized application UI
-- Platform package assets: not applicable; no application binary, icon container,
-  updater metadata, or installer is distributed
+- Platform package assets: no application binary or updater metadata is distributed;
+  the ZIP includes a macOS `.command`, Windows `.cmd`/PowerShell entry point, and the
+  existing POSIX shell installer for the Rime configuration data
 - macOS signing/TCC identity continuity: not applicable; the archive contains Rime
   configuration only and does not ship or replace `Squirrel.app`
-- Customer-facing install path: `README.md` and `INSTALL.md`; configuration rollback
-  uses the installer's timestamped backup
+- Customer-facing install path: `README.md`, `README.zh-CN.md`, `INSTALL.en.md`, and
+  `INSTALL.md`; configuration rollback uses the installer's timestamped backup
 
 ## Commands
 
@@ -81,7 +82,7 @@ test -z "$runtime_files"
 test -z "$(git ls-files '*.gram')"
 
 source_urls="$(rg -o 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' \
-  README.md INSTALL.md THIRD_PARTY.md | sed 's/^[^:]*://' | sort -u)"
+  README.md README.zh-CN.md INSTALL.md INSTALL.en.md THIRD_PARTY.md | sed 's/^[^:]*://' | sort -u)"
 while IFS= read -r source_url; do
   http_status="$(curl -sSL -o /dev/null -w '%{http_code}' \
     --max-time 30 "$source_url")"
@@ -123,8 +124,11 @@ git archive --format=zip \
 
 EXTRACT_DIR="$(mktemp -d /tmp/rime-smart-simplified-extract.XXXXXX)"
 RIME_TEST_DIR="$(mktemp -d /tmp/rime-smart-simplified-rime.XXXXXX)"
-unzip -q "$RELEASE_DIR/$ARTIFACT" -d "$EXTRACT_DIR"
-RIME_USER_DIR="$RIME_TEST_DIR" \
+  unzip -q "$RELEASE_DIR/$ARTIFACT" -d "$EXTRACT_DIR"
+  test -x "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-macOS.command"
+  test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-Windows.cmd"
+  test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/scripts/install.ps1"
+  RIME_USER_DIR="$RIME_TEST_DIR" \
   "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/scripts/install.sh" \
   --dry-run --no-download-gram
 ```
@@ -237,7 +241,8 @@ gh release download v1.0.0 --repo GravityPoet/rime-smart-simplified \
   tree includes unrelated changes, the target tag/Release exists, auth is missing,
   or the target commit cannot be identified exactly
 - Stop before tag push if local verification or target-commit CI fails
-- Stop before Release creation if the archive test, isolated installer dry run, or
+- Stop before Release creation if the archive test, platform entry-point checks,
+  isolated installer dry run, or
   checksum verification fails
 - After publication, do not use destructive tag/release deletion as an automatic rollback
 

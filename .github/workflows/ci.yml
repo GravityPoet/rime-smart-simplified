@@ -19,3 +19,16 @@ jobs:
 
       - name: Verify Rime package
         run: LUAC_BIN=luac5.4 ./scripts/verify.sh
+
+      - name: Verify Windows installer entry point
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "rime-smart-simplified-windows"
+          $output = ./scripts/install.ps1 -RimeUserDir $target -DryRun -NoDownloadGram
+          $output | Write-Output
+          if (-not ($output -match "Files to install:")) {
+            throw "Windows installer dry run did not report its manifest."
+          }
+          if (-not ($output -match "rime_ice.schema.yaml")) {
+            throw "Windows installer dry run omitted rime_ice.schema.yaml."
+          }

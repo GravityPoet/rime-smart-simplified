@@ -7,6 +7,7 @@ LUA_BIN="${LUA_BIN:-}"
 TMP_MANIFEST_DIR=""
 TMP_RIME_DIR=""
 TMP_BEHAVIOR_DIR=""
+TMP_WINDOWS_DIR=""
 
 cleanup() {
   rm -f \
@@ -23,6 +24,9 @@ cleanup() {
   fi
   if [ -n "$TMP_BEHAVIOR_DIR" ]; then
     rm -rf "$TMP_BEHAVIOR_DIR"
+  fi
+  if [ -n "$TMP_WINDOWS_DIR" ]; then
+    rm -rf "$TMP_WINDOWS_DIR"
   fi
 }
 trap cleanup EXIT
@@ -105,6 +109,20 @@ cd "$ROOT"
 printf 'Checking shell syntax...\n'
 bash -n "$ROOT/scripts/install.sh"
 bash -n "$ROOT/scripts/verify.sh"
+bash -n "$ROOT/Install-on-macOS.command"
+grep 'scripts\\install.ps1' "$ROOT/Install-on-Windows.cmd" >/dev/null
+
+if command -v pwsh >/dev/null 2>&1; then
+  printf 'Checking Windows installer dry run...\n'
+  TMP_WINDOWS_DIR="$(mktemp -d)"
+  WINDOWS_DRY_RUN="$(pwsh -NoLogo -NoProfile -File "$ROOT/scripts/install.ps1" \
+    -RimeUserDir "$TMP_WINDOWS_DIR" -DryRun -NoDownloadGram)"
+  printf '%s\n' "$WINDOWS_DRY_RUN" | grep 'Files to install:' >/dev/null
+  printf '%s\n' "$WINDOWS_DRY_RUN" | grep '^rime_ice\.schema\.yaml$' >/dev/null
+  printf '%s\n' "$WINDOWS_DRY_RUN" | grep '^custom_phrase\.txt$' >/dev/null
+else
+  printf 'Skipping Windows installer execution because pwsh is unavailable.\n'
+fi
 
 printf 'Checking Lua syntax...\n'
 LUAC_RESOLVED="$(find_luac)"

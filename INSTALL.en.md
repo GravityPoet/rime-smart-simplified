@@ -1,0 +1,167 @@
+# Installation, use, verification, and rollback
+
+This project is a **Rime user-directory configuration pack**, not Squirrel, Weasel, Fcitx, or IBus itself. Install a Rime frontend first, then apply this configuration.
+
+Official frontend entry points:
+
+- macOS: [Squirrel](https://github.com/rime/squirrel/releases/latest), macOS 13+
+- Windows: [Weasel](https://github.com/rime/weasel/releases/latest), Windows 8.1–11
+- Linux: [Fcitx5 Rime](https://github.com/fcitx/fcitx5-rime) or [IBus Rime](https://github.com/rime/ibus-rime)
+
+## 1. Install from the Release ZIP
+
+From the [latest Release](https://github.com/GravityPoet/rime-smart-simplified/releases/latest), download:
+
+```text
+rime-smart-simplified-vX.Y.Z.zip
+rime-smart-simplified-vX.Y.Z.zip.sha256
+```
+
+Do not use GitHub's generic `Source code (zip)` link. On macOS/Linux, verify the named asset with:
+
+```bash
+shasum -a 256 -c rime-smart-simplified-vX.Y.Z.zip.sha256
+```
+
+On Windows PowerShell:
+
+```powershell
+$zip = "rime-smart-simplified-vX.Y.Z.zip"
+$check = (Get-Content "${zip}.sha256").Trim().Split()[0].ToLowerInvariant()
+$actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $check) { throw "SHA-256 mismatch: expected $check actual $actual" }
+Write-Host "SHA-256 OK: $actual"
+```
+
+Extract the ZIP. The folder contains `Install-on-macOS.command`, `Install-on-Windows.cmd`, and `scripts/`.
+
+### macOS / Squirrel
+
+1. Double-click `Install-on-macOS.command` in Finder.
+2. If macOS blocks the first launch, Control-click the file and choose **Open**.
+3. The terminal fallback is:
+
+   ```bash
+   bash ./scripts/install.sh
+   ```
+
+The default target is `~/Library/Rime`.
+
+### Windows / Weasel
+
+1. Double-click `Install-on-Windows.cmd`.
+2. For PowerShell, run this from the extracted folder:
+
+   ```powershell
+   powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+   ```
+
+The default target is `%APPDATA%\Rime`.
+
+### Linux / Fcitx5 or IBus
+
+Open a terminal in the extracted folder and run one command for your frontend:
+
+```bash
+# Fcitx5 Rime
+RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
+
+# IBus Rime (use this instead of the line above)
+RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
+```
+
+Your Linux distribution may also require its Rime, Lua, or grammar-model support packages. Package names vary by distribution.
+
+The installers create a timestamped backup before overwriting files, preserve an existing `custom_phrase.txt` and cold-word preference files, and verify the grammar model before moving it from its temporary download path.
+
+## 2. Dry run and advanced options
+
+Preview the target, backup policy, and manifest before writing:
+
+```bash
+RIME_USER_DIR="$HOME/Library/Rime" bash ./scripts/install.sh --dry-run
+```
+
+Options:
+
+- `--no-download-gram`: install configuration without downloading the roughly 401 MB Wanxiang LTS grammar model.
+- `--skip-verify-gram`: download without the GitHub asset digest check. Use only when the API is unavailable and you accept the risk.
+- `--no-backup`: skip backups. Not recommended for ordinary upgrades.
+
+PowerShell equivalents are `-DryRun`, `-NoDownloadGram`, `-SkipVerifyGram`, and `-NoBackup`.
+
+## 3. Deploy and verify the first use
+
+When the installer prints `Installed`, you must still choose **Deploy / 重新部署** from the Rime frontend menu:
+
+1. Open the Squirrel, Weasel, Fcitx5, or IBus tray menu.
+2. Choose **Deploy**.
+3. Switch the OS input method to that Rime frontend.
+4. Select **Rime Ice / 雾凇拼音** in the scheme menu if it is not already active.
+5. In a text field, type `nihao` and choose `你好`; then type `rq` to test the date translator.
+
+Open the scheme menu with `Control + backtick`; on macOS, `Fn + F4` is an alternative when function keys are reserved by the system.
+
+Common inputs:
+
+| Input | Result |
+| --- | --- |
+| `rq` / `sj` / `xq` / `dt` | Date / time / weekday / date-time (UTC+8) |
+| `nl` | Lunar date |
+| `uuid` | Random UUID |
+| `Shift` | Temporary English while composing |
+| `-`, `=`, `[`, `]` | Candidate paging |
+
+Post-commit prediction is off by default. If your frontend provides a compatible local `predict.db`, you can enable it temporarily from the scheme menu; ordinary pinyin input does not require it.
+
+## 4. Install from source (developers)
+
+```bash
+git clone --branch v1.0.1 https://github.com/GravityPoet/rime-smart-simplified.git
+cd rime-smart-simplified
+bash ./scripts/install.sh
+```
+
+## 5. Grammar model and manual verification
+
+The default model is downloaded from:
+
+```text
+https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram
+```
+
+`LTS` is a rolling upstream Release, so its digest can change. Read the current digest from the [RIME-LMDG Release API](https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS) whenever you download again.
+
+## 6. Rollback
+
+Restore the timestamped backup printed by the installer, then deploy again.
+
+macOS:
+
+```bash
+rsync -a "$HOME/Library/Rime.backup.YYYYMMDD-HHMMSS/" "$HOME/Library/Rime/"
+```
+
+Linux Fcitx5:
+
+```bash
+rsync -a "$HOME/.local/share/fcitx5/rime.backup.YYYYMMDD-HHMMSS/" "$HOME/.local/share/fcitx5/rime/"
+```
+
+Windows PowerShell:
+
+```powershell
+$backup = Join-Path $env:APPDATA "Rime.backup.YYYYMMDD-HHMMSS"
+$target = Join-Path $env:APPDATA "Rime"
+Copy-Item -Path (Join-Path $backup "*") -Destination $target -Recurse -Force
+```
+
+The learning layer also keeps `context_boost.tsv.bak.pre-journal-v2` before its first compression threshold. Restore that snapshot only after exiting the Rime frontend, remove `context_boost.journal.tsv`, and deploy again.
+
+## 7. Local files never to commit
+
+- `context_boost.tsv`, `context_boost.journal.tsv`, and `context_boost*.bak.*`
+- `pin_by_select*.tsv`, `predict.db`, and `*.userdb/`
+- `sync/`, `build/`, `installation.yaml`, and `user.yaml`
+- `*.gram`
+- Any `custom_phrase.txt` containing personal information

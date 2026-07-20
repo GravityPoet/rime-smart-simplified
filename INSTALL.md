@@ -1,8 +1,94 @@
-# 安装、校验与回滚
+# 安装、使用、校验与回滚
 
-本仓库提供的是 Rime 用户目录配置。安装后需要在输入法菜单里执行“重新部署/Deploy”。
+本项目提供的是 **Rime 用户目录配置**，不是鼠须管、小狼毫、Fcitx 或 IBus 本体。请先安装对应的 Rime 前端，再安装本配置。
 
-## macOS 鼠须管 Squirrel
+官方前端入口：
+
+- macOS： [鼠须管 Squirrel](https://github.com/rime/squirrel/releases/latest)，适用于 macOS 13+
+- Windows： [小狼毫 Weasel](https://github.com/rime/weasel/releases/latest)，适用于 Windows 8.1–11
+- Linux： [Fcitx5 Rime](https://github.com/fcitx/fcitx5-rime) 或 [IBus Rime](https://github.com/rime/ibus-rime)
+
+## 从 Release ZIP 安装（推荐）
+
+在 [Release 页面](https://github.com/GravityPoet/rime-smart-simplified/releases/latest)下载：
+
+```text
+rime-smart-simplified-vX.Y.Z.zip
+rime-smart-simplified-vX.Y.Z.zip.sha256
+```
+
+不要下载 GitHub 自动生成的 `Source code (zip)`。macOS/Linux 可在 ZIP 所在目录校验：
+
+```bash
+shasum -a 256 -c rime-smart-simplified-vX.Y.Z.zip.sha256
+```
+
+Windows PowerShell 校验：
+
+```powershell
+$zip = "rime-smart-simplified-vX.Y.Z.zip"
+$check = (Get-Content "${zip}.sha256").Trim().Split()[0].ToLowerInvariant()
+$actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $check) { throw "SHA-256 mismatch: expected $check actual $actual" }
+Write-Host "SHA-256 OK: $actual"
+```
+
+解压后，文件夹根目录会有 `Install-on-macOS.command`、`Install-on-Windows.cmd` 和 `scripts/`。
+
+### macOS / 鼠须管
+
+1. 在 Finder 中双击 `Install-on-macOS.command`。
+2. 如果 macOS 阻止首次打开，对文件按住 Control，选择“打开”。
+3. 也可以在解压目录打开终端执行：
+
+   ```bash
+   bash ./scripts/install.sh
+   ```
+
+默认目标目录：`~/Library/Rime`。
+
+### Windows / 小狼毫
+
+1. 双击 `Install-on-Windows.cmd`。
+2. 如需命令行参数，在解压目录打开 PowerShell 执行：
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+   ```
+
+默认目标目录：`%APPDATA%\Rime`。
+
+### Linux / Fcitx5 或 IBus
+
+在解压目录打开终端，根据正在使用的前端执行一条命令：
+
+```bash
+# Fcitx5 Rime
+RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
+
+# IBus Rime（不要与上一条同时执行）
+RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
+```
+
+安装器会在覆盖前创建时间戳备份，保留已有私人短语和冷词偏好。首次安装可能下载约 401 MB 的万象 LTS 语法模型。
+
+## 部署与第一次使用
+
+安装器输出 `Installed` 后，还必须在 Rime 前端菜单执行 **Deploy / 重新部署**：
+
+1. 打开鼠须管、小狼毫、Fcitx5 或 IBus 的托盘菜单。
+2. 点击“重新部署 / Deploy”。
+3. 将系统输入法切换到对应的 Rime 前端。
+4. 在方案菜单中选择“雾凇拼音 / Rime Ice”。
+5. 在文本框输入 `nihao`，选择“你好”；再输入 `rq` 测试日期。
+
+方案菜单快捷键：`Control + 反引号键`；macOS 若功能键被系统占用，也可使用 `Fn + F4`。
+
+常用输入：`rq` / `sj` / `xq` / `dt`（日期、时间、星期、日期时间，UTC+8）、`nl`（农历）、`uuid`（随机 UUID）。候选翻页使用 `-`、`=`、`[`、`]`；组词时按 `Shift` 可临时输入英文。
+
+提交后预测默认关闭；如前端提供兼容的本地 `predict.db`，可在方案菜单中临时打开。普通拼音输入不依赖预测数据库。
+
+## 高级细节：macOS 安装器参数与模型
 
 Dry run：
 
@@ -60,7 +146,7 @@ Backup: none needed
 
 仓库中的 `custom_phrase.txt` 和三个 `lua/cold_word_drop/*_words.lua` 只是公开模板：首次安装时会复制；目标目录已有这些文件时，安装器会原样保留，不会覆盖私人短语或冷词隐藏、删除、软降频记录。
 
-## Linux
+## 高级细节：Linux 目标目录
 
 选择你正在使用的 Rime 前端目录：
 
@@ -86,7 +172,7 @@ cd /path/to/rime-smart-simplified && RIME_USER_DIR="$HOME/.config/ibus/rime" ./s
 
 Linux 上若语法模型不生效，优先确认你的发行版已安装 Rime 语法模型支持组件，例如 `librime-plugin-octagram` 或发行版对应包名。
 
-## Windows 小狼毫 Weasel
+## 高级细节：Windows 手动复制（不推荐）
 
 小狼毫用户目录通常是：
 
@@ -94,7 +180,17 @@ Linux 上若语法模型不生效，优先确认你的发行版已安装 Rime �
 $env:APPDATA\Rime
 ```
 
-PowerShell 安装：
+推荐直接双击解压目录中的 `Install-on-Windows.cmd`。它会调用带备份和私人状态保护的 `scripts/install.ps1`，安装完成后仍需在小狼毫菜单中执行“重新部署”。
+
+PowerShell 等价命令：
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+高级参数：`-DryRun`、`-NoDownloadGram`、`-SkipVerifyGram`、`-NoBackup`。
+
+如需手动复制（仅用于无法运行 PowerShell 安装器的环境）：
 
 ```powershell
 $repo = "C:\path\to\rime-smart-simplified"
@@ -151,7 +247,7 @@ if ($actual -ne $expected) {
 }
 ```
 
-然后在小狼毫菜单中执行“重新部署”。
+然后在小狼毫菜单中执行“重新部署”。手动复制不会替代安装器的自动备份能力，普通客户应优先使用 `Install-on-Windows.cmd`。
 
 ## 手动 SHA-256 校验
 

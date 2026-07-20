@@ -1,103 +1,136 @@
-# ⚡️ Rime Smart Simplified
+<p align="center">
+  <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/Language-English-2563EB?style=for-the-badge"></a>
+  <a href="./README.zh-CN.md"><img alt="Chinese" src="https://img.shields.io/badge/Language-Chinese-EF4444?style=for-the-badge"></a>
+</p>
 
-> **把商业输入法的丝滑体验，带入纯本地、无广告、输入数据不上传的开源生态。**
+# Rime Smart Simplified
 
-一套**开箱即用**、面向日常输入深度优化的 Rime (中州韵/鼠须管/小狼毫) 简体中文配置。基于「雾凇拼音」、万象语言模型 (LMDG) 与多项增强脚本，为您提供**安全、聪明、免折腾**的输入体验。
+> A local-first Rime configuration for comfortable Simplified Chinese input, with contextual ranking, fuzzy pinyin, English mixing, and privacy-friendly learning.
 
----
+[Download the latest ZIP](https://github.com/GravityPoet/rime-smart-simplified/releases/latest) · [Installation and rollback guide](./INSTALL.en.md) · [Privacy boundary](./PRIVACY.md)
 
-## ✨ 核心亮点 (Why Choose This?)
+This project is a **Rime user-directory configuration pack**. It is not a standalone input-method application. Install a Rime frontend first, then apply this pack to that frontend's user directory.
 
-### 1. 🚀 开箱即用的商业级体验
-告别 Rime 陡峭的入门门槛！我们为你精调了痛点，无需折腾直接上手：
-- **极准的首屏候选**：打字如飞，无需频繁按 +/- 翻页。
-- **搜狗感模糊音**：极稳的自动容错（zh/ch/sh、n/l、an/ang、en/eng 等），手残党福音。
-- **无缝中英混输**：直接拼写英文单词（如 `hi` `app` `bug`），无需频繁敲击 Shift 切换中英文。
-- **Emoji 与符号支持**：自然语言直接打出颜文字与常用 Emoji ( ´ ▽ ` )ﾉ。
+## What you get
 
-### 2. 🧠 AI 语言模型加持 (Smart)
-引入 **万象 LTS** 强大的 n-gram 语言模型，让输入法“长脑子”：
-- **上下文智能调序**：根据你输入的前半句话，动态预测并调整下一个词的候选顺序。
-- **提交后联想**：使用本地 `predict.db` 给出下一词候选，固定转为简体并限制在首屏短链内，避免无限联想拖慢输入。
-- **本地学习进化**：你的每次有效选择都会先作为学习种子保留，重复出现后参与候选调序，越用越懂你。配合**短码降频与回滚机制**，就算不小心选错也能轻松纠正。
+- **A sensible first screen:** Rime Ice (雾凇拼音) with Simplified Chinese defaults, fuzzy pinyin, English mixing, emoji, and common dictionaries.
+- **Local adaptation:** context ranking and learning data stay in the local Rime user directory. Existing private phrases and cold-word preferences are preserved during updates.
+- **Optional local assistance:** the bundled configuration can use the local Wanxiang LTS grammar model. Post-commit prediction is off by default so ordinary copy/paste shortcuts are not intercepted.
 
-### 3. 🛡️ 运行时本地隐私优先 (Privacy First)
-你的输入法，绝不应该成为暴露隐私的后门。
-- **运行时零联网，零输入数据上传**：代码全开源；安装脚本仅在缺少语言模型时可选下载官方模型资产，输入内容不会离开本机。
-- **数据属于你**：词库与个人习惯仅保存在你的硬盘。
-- **杜绝商业追踪**：从根本上解决“刚在微信聊完，淘宝就推广告”的隐私劫持痛点。
+## Before you download
 
-### 4. 🎯 简体中文极度舒适
-- **短码守门**：繁体字、生僻字、英文、Emoji 会被智能后移，绝不干扰常用的短拼音基础输入。
-- **海量词库底座**：基于雾凇拼音的千万级词库及专属英文词典，日常交流、专业术语一网打尽。
+You need one Rime frontend already installed:
 
----
+| Platform | Frontend | Official entry point |
+| --- | --- | --- |
+| macOS 13+ | Squirrel (鼠须管) | [Rime downloads](https://rime.im/download/) · [Squirrel releases](https://github.com/rime/squirrel/releases/latest) |
+| Windows 8.1–11 | Weasel (小狼毫) | [Rime downloads](https://rime.im/download/) · [Weasel releases](https://github.com/rime/weasel/releases/latest) |
+| Linux | Fcitx5 Rime or IBus Rime | [Fcitx5 Rime](https://github.com/fcitx/fcitx5-rime) · [IBus Rime](https://github.com/rime/ibus-rime) |
 
-## 🧭 智能功能速查
+The first installation may download the official `wanxiang-lts-zh-hans.gram` grammar model (about 401 MB). Runtime input is not uploaded by this project; the installer only contacts GitHub when it needs to obtain or verify that model.
 
-- `Control + 反引号键` 打开方案菜单；Mac 将功能键用于系统控制时也可按 `Fn + F4`。“常规 / 聊天 / 写作 / 代码”是互斥场景，切换一个就会退出另一个。
-- `rq` 日期、`sj` 时间、`xq` 星期和 `dt` 日期时间全部固定 UTC+8；`ts` 时间戳、`nl` 农历、`uuid` 随机 UUID、`z` 重复上次上屏内容。
-- 提交后预测默认关闭，避免候选组合干扰复制、粘贴等系统快捷键；需要连续联想时可在方案菜单临时开启“预测”。预测候选仍使用完整的本地 `predict.db`，先转为简体，每次最多显示一页并允许一段短链联想。
-- 上下文调序默认开启，只提升已经存在的候选。学习数据先写小型增量日志，再做无损原子压缩；所有有效历史记录（包括只出现一次的学习种子）都不会按时间、全库大小或单个上下文候选数自动删除，搭配累计两次后才参与调序，每个上下文只用权重最高的 8 个搭配影响候选顺序。
-- 智能排序会融合最近 1/2/3 段上下文：当前会话第一次选择即可临时生效，跨会话累计两次后稳定生效；近期偏好只获得运行时加分，不衰减、不改写旧计数，连续重复输入也会正常学习。
-- 更新安装时会保留用户目录中已有的 `custom_phrase.txt`，以及冷词隐藏、删除、软降频记录，不会再用仓库公开模板覆盖个人数据。
+## Install from the ZIP (recommended)
 
----
+### 1. Download the correct file
 
-## 💻 快速安装
+On the [Release page](https://github.com/GravityPoet/rime-smart-simplified/releases/latest), download the asset named:
 
-### macOS (鼠须管 Squirrel)
-
-本配置内置了一键安装脚本（自动下载配置与大语言模型）：
-
-```bash
-git clone https://github.com/GravityPoet/rime-smart-simplified.git
-cd rime-smart-simplified
-./scripts/install.sh
+```text
+rime-smart-simplified-vX.Y.Z.zip
 ```
 
-> **注意**：脚本会自动从 GitHub Release 下载 `wanxiang-lts-zh-hans.gram` 语言模型文件（约 401MB）。
-> 下载完成后会校验 GitHub Release API 提供的 SHA-256 digest；更多 Linux / Windows 安装方式见 [INSTALL.md](./INSTALL.md)。
+Do **not** choose GitHub's generic `Source code (zip)` link. The named asset includes the customer entry points and the matching `.sha256` checksum file.
 
-### Windows (小狼毫 Weasel) / Linux
+### 2. Extract, then run the platform entry point
 
-参见 [INSTALL.md](./INSTALL.md)，其中包含 Fcitx5 Rime、IBus Rime、小狼毫用户目录、PowerShell 安装命令与手动 SHA-256 校验步骤。
+#### macOS / Squirrel
 
----
+1. Extract the ZIP in Finder.
+2. Open the extracted folder and double-click `Install-on-macOS.command`.
+3. If macOS asks for confirmation, Control-click the file and choose **Open**. The terminal fallback is:
 
-## 🔒 隐私边界与数据说明
+   ```bash
+   bash ./scripts/install.sh
+   ```
 
-首次安装会复制公开模板；之后你在用户目录中加入的私密条目，以及本地生成的 `context_boost.tsv`、`context_boost.journal.tsv`、`predict.db` 和 `lua/cold_word_drop/*_words.lua` 等用户习惯记录，均属于你的**绝对私密资产**。本仓库不会收集或要求你上传这些数据；更新安装会保留已有私人短语和冷词偏好。
+#### Windows / Weasel
 
----
+1. Extract the ZIP.
+2. Double-click `Install-on-Windows.cmd`.
+3. If you prefer PowerShell, open PowerShell in the extracted folder and run:
 
-## 🤝 支持与赞助
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+   ```
 
-**为什么我们需要您的支持？**
+The Windows installer defaults to `%APPDATA%\Rime`. It creates a timestamped backup before replacing existing files and keeps existing private phrase and cold-word files.
 
-**Rime Smart Simplified** 诞生自对“隐私安全”与“效率自由”的纯粹追求。作为一款 **100% 离线、隐私零泄漏且完全免费开源** 的工具，它的持续维护离不开社区的温度：
-*   **帮您省下高昂的 SaaS 账单**：相比于市面上动辄按分钟计费、强制包月的在线服务平台，本工具帮您把所有算力留在了本地，每年可借此省下成百上千元的云端订阅费。
-*   **持续维护与测试的时间精力成本**：为了保证“解压即用”的完美体验，我们内置了预编译的依赖与侧载程序，并需要花费大量的精力进行多平台依赖的编译集成、适配操作系统的更新，以及进行多架构实机兼容测试。
-*   **支持未来的进化**：您的每一笔赞助，都将直接用于优化本地推理算法、支持更多无损翻译接口，并让我们有底气继续保持纯净无广告的开源体验。
+#### Linux / Fcitx5 or IBus
 
-如果您觉得本工具帮您节省了时间、守护了隐私或创造了价值，不妨：
-*   🌟 给我们一个 **Star**（这是对我们最大的精神鼓励！）。
-*   ☕ **请作者喝一杯咖啡**，支持我们持续投入时间精力进行维护和测试（请备注您的 GitHub 账号）。
+Open a terminal in the extracted folder and choose the directory matching your frontend:
 
-| 微信赞赏码 | PayPal 收款码 |
+```bash
+# Fcitx5 Rime
+RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
+
+# IBus Rime (use this instead of the line above)
+RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
+```
+
+### 3. Deploy and select the scheme
+
+After the installer finishes:
+
+1. Open your frontend's tray/menu item.
+2. Choose **Deploy / 重新部署**.
+3. Switch the operating-system input method to Squirrel, Weasel, Fcitx5 Rime, or IBus Rime.
+4. In the scheme menu, select **雾凇拼音 / Rime Ice** if it is not already selected.
+
+## First-use test
+
+Open any text field and try these three checks:
+
+1. Type `nihao`, then choose `你好` with `Enter` or the candidate number.
+2. Type `rq` to show today's date, or `sj` to show the current time (UTC+8).
+3. Press `Control` + the backtick key (macOS may also use `Fn + F4`) to open the scheme menu.
+
+Useful everyday controls:
+
+| Action | Shortcut / input |
+| --- | --- |
+| Temporary English | `Shift` while composing, or `Caps Lock` according to the frontend setting |
+| Previous / next candidate page | `-` / `=` or `[` / `]` |
+| Date, time, weekday | `rq`, `sj`, `xq`, `dt` |
+| Lunar date / UUID | `nl`, `uuid` |
+| Scene modes | Open the scheme menu and choose normal, chat, writing, or code |
+
+Prediction is intentionally **off by default**. If your frontend provides a compatible local `predict.db`, it can be enabled temporarily from the scheme menu; it is not required for ordinary pinyin input.
+
+## Update and rollback
+
+Run the same platform installer for a later release. It backs up files that it is about to overwrite, preserves existing private phrases and cold-word preferences, and prints the backup directory. Restore that directory, then deploy again:
+
+```bash
+rsync -a "$HOME/Library/Rime.backup.YYYYMMDD-HHMMSS/" "$HOME/Library/Rime/"
+```
+
+See [INSTALL.en.md](./INSTALL.en.md) for Linux/Windows paths, checksum verification, model download controls, and the complete rollback procedure.
+
+## Support the project
+
+If this configuration saves you time or keeps your input local, a Star or a small sponsorship helps fund compatibility testing and maintenance.
+
+| WeChat | PayPal |
 | :---: | :---: |
-| <img src="./docs/sponsors/wechat_pay.jpg" width="220" alt="微信赞赏码" /> | <img src="./docs/sponsors/paypal.jpg" width="220" alt="PayPal 收款码" /> |
+| <img src="./docs/sponsors/wechat_pay.jpg" width="220" alt="WeChat sponsorship QR code" /> | <img src="./docs/sponsors/paypal.jpg" width="220" alt="PayPal sponsorship QR code" /> |
 
----
+## Trust and limits
 
-## 📄 鸣谢与许可证
+- This repository ships configuration, Lua extensions, dictionaries, and scripts; it does not ship Squirrel, Weasel, Fcitx, or IBus themselves.
+- The grammar model is downloaded from the upstream [RIME-LMDG](https://github.com/amzxyz/RIME-LMDG) release and checked against its GitHub asset digest by default.
+- The package does not provide cloud prediction or cloud synchronization. Your local Rime frontend still controls OS-level input-method behavior.
+- The ZIP is released under the repository's license. Third-party licenses are listed in [THIRD_PARTY.md](./THIRD_PARTY.md).
 
-站在巨人的肩膀上，本仓库是一个多来源聚合优化的项目。感谢开源社区的无私奉献：
-- 核心词库与方案基于 [雾凇拼音 (rime-ice)](https://github.com/iDvel/rime-ice) (GPL-3.0)
-- 语言模型数据来自 [万象 (RIME-LMDG)](https://github.com/amzxyz/RIME-LMDG) (CC-BY-4.0)
-- 部首组件来自 [rime-radical-pinyin](https://github.com/mirtlecn/rime-radical-pinyin) (GPL-3.0)
+## Acknowledgements
 
-详细协议请参考 [LICENSE](./LICENSE) 与 [THIRD_PARTY.md](./THIRD_PARTY.md)。
-
----
-**如果你觉得好用，别忘了给项目点个 ⭐ Star 呀！**
+This configuration builds on [Rime Ice](https://github.com/iDvel/rime-ice), [RIME-LMDG](https://github.com/amzxyz/RIME-LMDG), and [rime-radical-pinyin](https://github.com/mirtlecn/rime-radical-pinyin). See [LICENSE](./LICENSE) and [THIRD_PARTY.md](./THIRD_PARTY.md).
