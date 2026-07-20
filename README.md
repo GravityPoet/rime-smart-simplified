@@ -94,7 +94,7 @@ cd rime-smart-simplified
 
 站在巨人的肩膀上，本仓库是一个多来源聚合优化的项目。感谢开源社区的无私奉献：
 - 核心词库与方案基于 [雾凇拼音 (rime-ice)](https://github.com/iDvel/rime-ice) (GPL-3.0)
-- 语言模型数据来自 [万象 (RIME-LMDG)](https://github.com/wongstz/rime-lmdg) (CC-BY-4.0)
+- 语言模型数据来自 [万象 (RIME-LMDG)](https://github.com/amzxyz/RIME-LMDG) (CC-BY-4.0)
 - 部首组件来自 [rime-radical-pinyin](https://github.com/mirtlecn/rime-radical-pinyin) (GPL-3.0)
 
 详细协议请参考 [LICENSE](./LICENSE) 与 [THIRD_PARTY.md](./THIRD_PARTY.md)。
