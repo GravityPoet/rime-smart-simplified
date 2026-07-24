@@ -1,5 +1,3 @@
-## 🌐 [点击这里切换到：中文版 (Chinese Version)](./README.zh-CN.md)
-
 <p align="center">
   <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/Language-English-2563EB?style=for-the-badge"></a>
   <a href="./README.zh-CN.md"><img alt="Chinese" src="https://img.shields.io/badge/Language-Chinese-EF4444?style=for-the-badge"></a>
