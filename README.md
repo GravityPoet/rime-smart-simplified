@@ -6,8 +6,8 @@
 # 🚀 Rime Smart Simplified (Rime 智能简体中文增强包)
 
 <p align="center">
-  <strong>“把 Rime 的绝对隐私安全，配上媲美云端输入法的首屏精准度。”</strong><br>
-  开箱即用 · 401MB 本地 LLM 语法模型 · 零配置一键安装 · 彻底告别打字隐私泄露
+  <strong>最智能的本地隐私中文输入法</strong><br>
+  零云端上传 · 首屏精准度拉满 · 401MB 本地 LLM 模型 · 零配置一键安装
 </p>
 
 <p align="center">
