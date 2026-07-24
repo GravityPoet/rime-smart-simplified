@@ -1,3 +1,5 @@
+## 🌐 [点击这里切换到：中文版 (Chinese Version)](./README.zh-CN.md)
+
 <p align="center">
   <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/Language-English-2563EB?style=for-the-badge"></a>
   <a href="./README.zh-CN.md"><img alt="Chinese" src="https://img.shields.io/badge/Language-Chinese-EF4444?style=for-the-badge"></a>
@@ -134,3 +136,12 @@ If this configuration saves you time or keeps your input local, a Star or a smal
 ## Acknowledgements
 
 This configuration builds on [Rime Ice](https://github.com/iDvel/rime-ice), [RIME-LMDG](https://github.com/amzxyz/RIME-LMDG), and [rime-radical-pinyin](https://github.com/mirtlecn/rime-radical-pinyin). See [LICENSE](./LICENSE) and [THIRD_PARTY.md](./THIRD_PARTY.md).
+
+---
+
+## ⚖️ Licensing & Commercial Terms
+
+rime-smart-simplified Community Edition is open source under the **[AGPL-3.0 License](./LICENSE)**.
+
+- **Open Source Free Use**: Any individual or enterprise may use and distribute rime-smart-simplified for free in accordance with AGPL-3.0 license terms.
+- **Commercial Dual-License**: If you or your organization need closed-source integration, exemption from AGPL-3.0 copyleft obligations, or proprietary redistribution rights, please contact us for a [Commercial License](mailto:moonlitpoet@proton.me). For third-party attributions, see [THIRD_PARTY.md](./THIRD_PARTY.md).

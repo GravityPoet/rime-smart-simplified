@@ -1,3 +1,5 @@
+## 🌐 [Click here to switch to: English Version](./README.md)
+
 <p align="center">
   <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/Language-English-2563EB?style=for-the-badge"></a>
   <a href="./README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/Language-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-EF4444?style=for-the-badge"></a>
@@ -134,3 +136,12 @@ Linux、Windows 路径、SHA-256 校验、模型下载开关和完整回滚步�
 ## 致谢
 
 本配置基于并致谢 [雾凇拼音](https://github.com/iDvel/rime-ice)、[RIME-LMDG](https://github.com/amzxyz/RIME-LMDG) 和 [rime-radical-pinyin](https://github.com/mirtlecn/rime-radical-pinyin)。详见 [LICENSE](./LICENSE) 与 [THIRD_PARTY.md](./THIRD_PARTY.md)。
+
+---
+
+## ⚖️ 许可证 (License)
+
+rime-smart-simplified 社区版基于 **[AGPL-3.0 License](./LICENSE)** 协议开源。
+
+- **开源免费使用**：任何个人和企业均可按照 AGPL-3.0 协议规定**免费使用与分发**。
+- **商业免开源许可**：如果您或您的企业需要将本软件**闭源集成、免除 AGPL-3.0 开源义务或获取专有再分发权**，请联系我们购买 [商业许可 (Commercial Dual-License)](mailto:moonlitpoet@proton.me)。第三方授权与归属详见 [THIRD_PARTY.md](./THIRD_PARTY.md) 文件。
