@@ -10,6 +10,7 @@ By contributing to this repository (via Pull Request, patch, or issue attachment
 
 - **Original Work**: Your contribution is your original work, or you have sufficient legal rights to submit it.
 - **Dual-Licensing Grant**: You grant the project owner (GravityPoet) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, modify, relicense, distribute, and sublicense your contribution under both the AGPL-3.0 open-source license and separate commercial/proprietary license terms.
+  > *Note: The Dual-Licensing Grant applies strictly to original contributions made to this repository and does not alter the licensing terms or obligations of third-party dependencies specified in [THIRD_PARTY.md](./THIRD_PARTY.md).*
 - **No Confidential Code**: Your contribution does not contain confidential information or trade secrets.
 
 ## Contact
