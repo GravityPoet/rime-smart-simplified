@@ -445,12 +445,11 @@ local function push_history(text)
   end
 end
 
+-- 纯直通必须保持完整流式：yield 是惰性挂起，下游（分页菜单）拉多少
+-- 算多少，不设上限也不会强制展开整条候选流；截断反而会让深翻页丢候选。
 local function pass_through(input)
-  local count = 0
   for cand in input:iter() do
     yield(cand)
-    count = count + 1
-    if count >= REORDER_CAP then break end
   end
 end
 
@@ -462,13 +461,26 @@ local function is_new_text(cand, yielded)
   return true
 end
 
+-- 预测联想段（librime-predict）在每次上屏后触发；候选顺序本就来自
+-- 预测模型，重排收益低而每次上屏都要付缓存/查表成本，是打字「发粘」
+-- 的来源之一。预测段一律走零开销直通。
+local function in_prediction_segment(context)
+  local ok, hit = pcall(function()
+    local composition = context.composition
+    if not composition or composition:empty() then return false end
+    local seg = composition:back()
+    return seg and seg:has_tag("prediction") or false
+  end)
+  return ok and hit
+end
+
 function M.init(env)
   local user_dir = rime_api.get_user_data_dir()
   data_path = user_dir .. "/" .. DATA_FILE
   journal_path = user_dir .. "/" .. JOURNAL_FILE
   load_map()
 
-  env.engine.context.commit_notifier:connect(function(ctx)
+  env.commit_connection = env.engine.context.commit_notifier:connect(function(ctx)
     local text = learnable(ctx:get_commit_text())
     if not text then return end
 
@@ -500,7 +512,12 @@ function M.init(env)
   end)
 end
 
-function M.fini(_)
+function M.fini(env)
+  -- 断开通知器，避免切换方案后旧回调残留导致重复计数。
+  if env and env.commit_connection then
+    if env.commit_connection.disconnect then env.commit_connection:disconnect() end
+    env.commit_connection = nil
+  end
   maybe_save(true)
 end
 
@@ -570,7 +587,7 @@ end
 
 function M.func(input, env)
   local context = env.engine.context
-  if not context:get_option("smart_context") then
+  if not context:get_option("smart_context") or in_prediction_segment(context) then
     pass_through(input)
     return
   end
@@ -600,14 +617,21 @@ function M.func(input, env)
     end
   end
 
+  -- 只物化前 REORDER_CAP 个候选参与重排；之后的候选保持流式输出，
+  -- 深翻页仍能拿到完整候选流。
+  local flushed = false
   for cand in input:iter() do
-    cache[#cache + 1] = cand
-    if #cache >= REORDER_CAP then
-      flush_cache()
-      return
+    if not flushed then
+      cache[#cache + 1] = cand
+      if #cache >= REORDER_CAP then
+        flush_cache()
+        flushed = true
+      end
+    else
+      if is_new_text(cand, yielded) then yield(cand) end
     end
   end
-  flush_cache()
+  if not flushed then flush_cache() end
 end
 
 M._test = {

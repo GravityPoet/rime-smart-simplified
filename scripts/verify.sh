@@ -149,6 +149,7 @@ assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.schema\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.dict\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime\.lua$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^custom_phrase\.txt$'
+assert_in_manifest "$MANIFEST_OUTPUT" '^smart_chat_phrases\.txt$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^lua/.+\.lua$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^lua/cold_word_drop/drop_words\.lua$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^lua/cold_word_drop/hide_words\.lua$'
@@ -157,27 +158,32 @@ assert_not_in_manifest "$MANIFEST_OUTPUT" '(^user\.yaml$|^installation\.yaml$|ru
 
 printf 'Checking private phrase and cold-word preference preservation...\n'
 cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/custom_phrase.txt"
+cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/smart_chat_phrases.txt"
 mkdir -p "$TMP_MANIFEST_DIR/lua/cold_word_drop"
 cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua"
 cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua"
 cp "$ROOT/PRIVACY.md" "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua"
 PRIVATE_PHRASE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+CHAT_PHRASE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/smart_chat_phrases.txt")"
 COLD_DROP_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua")"
 COLD_HIDE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua")"
 COLD_REDUCE_BEFORE="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua")"
 PRESERVE_DRY_RUN="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --dry-run --no-download-gram)"
 assert_not_in_manifest "$PRESERVE_DRY_RUN" '^custom_phrase\.txt$'
+assert_not_in_manifest "$PRESERVE_DRY_RUN" '^smart_chat_phrases\.txt$'
 assert_not_in_manifest "$PRESERVE_DRY_RUN" '^lua/cold_word_drop/(drop|hide|reduce_freq)_words\.lua$'
 printf '%s\n' "$PRESERVE_DRY_RUN" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
 printf '%s\n' "$PRESERVE_DRY_RUN" | grep 'Cold-word preferences: preserving existing hide/drop/reduce records' >/dev/null
-PRESERVE_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --no-download-gram)"
+PRESERVE_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict)"
 printf '%s\n' "$PRESERVE_OUTPUT" | grep 'Private phrases: preserving existing custom_phrase.txt' >/dev/null
 printf '%s\n' "$PRESERVE_OUTPUT" | grep 'Cold-word preferences: preserving existing hide/drop/reduce records' >/dev/null
 PRIVATE_PHRASE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/custom_phrase.txt")"
+CHAT_PHRASE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/smart_chat_phrases.txt")"
 COLD_DROP_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/drop_words.lua")"
 COLD_HIDE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/hide_words.lua")"
 COLD_REDUCE_AFTER="$(sha256_file "$TMP_MANIFEST_DIR/lua/cold_word_drop/reduce_freq_words.lua")"
 test "$PRIVATE_PHRASE_BEFORE" = "$PRIVATE_PHRASE_AFTER"
+test "$CHAT_PHRASE_BEFORE" = "$CHAT_PHRASE_AFTER"
 test "$COLD_DROP_BEFORE" = "$COLD_DROP_AFTER"
 test "$COLD_HIDE_BEFORE" = "$COLD_HIDE_AFTER"
 test "$COLD_REDUCE_BEFORE" = "$COLD_REDUCE_AFTER"
@@ -217,7 +223,7 @@ fi
 
 printf 'Checking temporary install and Rime build...\n'
 TMP_RIME_DIR="$(mktemp -d)"
-INSTALL_OUTPUT="$(RIME_USER_DIR="$TMP_RIME_DIR" "$ROOT/scripts/install.sh" --no-download-gram)"
+INSTALL_OUTPUT="$(RIME_USER_DIR="$TMP_RIME_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict)"
 printf '%s\n' "$INSTALL_OUTPUT" | grep 'Backup: none needed' >/dev/null
 
 rime_deployer --build "$TMP_RIME_DIR" "$TMP_RIME_DIR" "$TMP_RIME_DIR/build"
@@ -226,7 +232,7 @@ test -f "$TMP_RIME_DIR/build/rime_ice.table.bin"
 test -f "$TMP_RIME_DIR/build/melt_eng.table.bin"
 test -f "$TMP_RIME_DIR/build/radical_pinyin.table.bin"
 grep -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
-grep -A1 -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" | grep 'reset: 0' >/dev/null
+grep -A1 -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" | grep 'reset: 1' >/dev/null
 grep 'max_candidates: 9' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'max_iterations: 2' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'simplifier@prediction_simplify' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null

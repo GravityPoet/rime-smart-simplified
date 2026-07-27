@@ -213,7 +213,7 @@ function M.init(env)
   data_path = dir .. "/" .. DATA_FILE
   load_map()
 
-  env.engine.context.commit_notifier:connect(function(ctx)
+  env.commit_connection = env.engine.context.commit_notifier:connect(function(ctx)
     local code = ctx.input
     if not is_learnable_code(code) then return end
 
@@ -227,6 +227,11 @@ function M.init(env)
 end
 
 function M.fini(env)
+  -- 断开通知器，避免切换方案后旧回调残留导致重复计数。
+  if env and env.commit_connection then
+    if env.commit_connection.disconnect then env.commit_connection:disconnect() end
+    env.commit_connection = nil
+  end
   maybe_save(true)
 end
 

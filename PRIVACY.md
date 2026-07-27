@@ -11,6 +11,7 @@
 需要特别注意：Rime 的用户目录会自然积累个人输入习惯。以下文件可能含个人信息，不应公开：
 
 - `custom_phrase.txt`
+- `smart_chat_phrases.txt`
 - `context_boost.tsv`
 - `context_boost.journal.tsv`
 - `context_boost*.bak.*`

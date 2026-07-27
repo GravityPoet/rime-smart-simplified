@@ -70,7 +70,7 @@ RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
 RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 ```
 
-安装器会在覆盖前创建时间戳备份，保留已有私人短语和冷词偏好。首次安装可能下载约 401 MB 的万象 LTS 语法模型。
+安装器会在覆盖前创建时间戳备份，保留已有私人短语、聊天短语和冷词偏好。首次安装可能下载约 401 MB 的万象 LTS 语法模型。
 
 ## 部署与第一次使用
 
@@ -86,7 +86,9 @@ RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 
 常用输入：`rq` / `sj` / `xq` / `dt`（日期、时间、星期、日期时间，UTC+8）、`nl`（农历）、`uuid`（随机 UUID）。候选翻页使用 `-`、`=`、`[`、`]`；组词时按 `Shift` 可临时输入英文。
 
-提交后预测默认关闭；如前端提供兼容的本地 `predict.db`，可在方案菜单中临时打开。普通拼音输入不依赖预测数据库。
+提交后预测默认开启，并会在每次新会话重置为开启。安装脚本会自动下载官方 `predict.db` 预测数据（librime-predict `data-1.0`，固定 SHA-256 校验）；不习惯联想菜单占用空格或数字键时，可在方案菜单临时关闭「预测」。普通拼音输入不依赖预测数据库；不需要该文件时可用 `--no-download-predict`（Windows：`-NoDownloadPredict`）跳过。
+
+中英混排自动空格（如 `VIP中P` → `VIP 中 P`、连续英文自动加空格）由方案菜单「空格」开关控制，默认关闭，状态会被记住。
 
 ## 高级细节：macOS 安装器参数与模型
 
@@ -144,7 +146,7 @@ cd /path/to/rime-smart-simplified && ./scripts/install.sh --no-download-gram
 Backup: none needed
 ```
 
-仓库中的 `custom_phrase.txt` 和三个 `lua/cold_word_drop/*_words.lua` 只是公开模板：首次安装时会复制；目标目录已有这些文件时，安装器会原样保留，不会覆盖私人短语或冷词隐藏、删除、软降频记录。
+仓库中的 `custom_phrase.txt`、`smart_chat_phrases.txt` 和三个 `lua/cold_word_drop/*_words.lua` 只是公开模板：首次安装时会复制；目标目录已有这些文件时，安装器会原样保留，不会覆盖私人短语、聊天短语或冷词隐藏、删除、软降频记录。
 
 ## 高级细节：Linux 目标目录
 
@@ -188,7 +190,7 @@ PowerShell 等价命令：
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-高级参数：`-DryRun`、`-NoDownloadGram`、`-SkipVerifyGram`、`-NoBackup`。
+高级参数：`-DryRun`、`-NoDownloadGram`、`-SkipVerifyGram`、`-NoDownloadPredict`、`-NoBackup`。
 
 如需手动复制（仅用于无法运行 PowerShell 安装器的环境）：
 
@@ -296,4 +298,4 @@ rsync -a ~/.local/share/fcitx5/rime.backup.YYYYMMDD-HHMMSS/ ~/.local/share/fcitx
 - `installation.yaml`
 - `user.yaml`
 - `*.gram`
-- 含个人邮箱、手机号、账号、暗号、客户名、内部项目名的 `custom_phrase.txt`
+- 含个人邮箱、手机号、账号、暗号、客户名、内部项目名的 `custom_phrase.txt` 或 `smart_chat_phrases.txt`

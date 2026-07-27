@@ -1,13 +1,7 @@
 -- create metatable
-orgtype = type
-
-function type(obj)
-	local _type = orgtype(obj)
-	if "table" == _type and obj._cname then
-		return obj._cname
-	end
-	return _type
-end
+-- 注意：librime-lua 所有脚本共享同一个 Lua VM。此处曾经全局覆盖 type()
+-- （表带 _cname 时返回 _cname），会污染其他脚本的类型判断；本仓库内
+-- 没有任何 _cname 使用者，已移除覆盖，保留 table 扩展方法。
 
 function metatable(...)
 	if ... and type(...) == "table" then

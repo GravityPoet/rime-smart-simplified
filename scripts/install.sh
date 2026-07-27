@@ -7,12 +7,18 @@ DRY_RUN=0
 BACKUP=1
 DOWNLOAD_GRAM=1
 VERIFY_GRAM=1
+DOWNLOAD_PREDICT=1
 GRAM_FILE="wanxiang-lts-zh-hans.gram"
 GRAM_URL="https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram"
 GRAM_API_URL="https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS"
+# librime-predict 官方数据（繁体，方案内 prediction_simplify 已固定转为简体）。
+# 该 Release 较旧，GitHub API 不提供 digest，这里固定校验已知 SHA-256。
+PREDICT_FILE="predict.db"
+PREDICT_URL="https://github.com/rime/librime-predict/releases/download/data-1.0/predict.db"
+PREDICT_SHA256="2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be"
 
 usage() {
-  printf 'Usage: %s [--dry-run] [--no-backup] [--no-download-gram] [--skip-verify-gram]\n' "$0"
+  printf 'Usage: %s [--dry-run] [--no-backup] [--no-download-gram] [--skip-verify-gram] [--no-download-predict]\n' "$0"
 }
 
 fetch_gram_digest() {
@@ -74,6 +80,9 @@ while [ "$#" -gt 0 ]; do
     --skip-verify-gram)
       VERIFY_GRAM=0
       ;;
+    --no-download-predict)
+      DOWNLOAD_PREDICT=0
+      ;;
     -h|--help)
       usage
       exit 0
@@ -103,6 +112,9 @@ trap 'rm -f "$MANIFEST"' EXIT
     \)
   if [ ! -e "$TARGET/custom_phrase.txt" ]; then
     printf '%s\n' './custom_phrase.txt'
+  fi
+  if [ ! -e "$TARGET/smart_chat_phrases.txt" ]; then
+    printf '%s\n' './smart_chat_phrases.txt'
   fi
   find ./cn_dicts ./cn_dicts_wanxiang ./en_dicts -type f \
     \( -name '*.dict.yaml' -o -name '*.txt' \)
@@ -152,6 +164,15 @@ elif [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   fi
 else
   printf 'Grammar model: skipped by --no-download-gram\n'
+fi
+if [ -f "$ROOT/$PREDICT_FILE" ]; then
+  printf 'Predict data: will copy local %s\n' "$PREDICT_FILE"
+elif [ -f "$TARGET/$PREDICT_FILE" ]; then
+  printf 'Predict data: already exists at target\n'
+elif [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
+  printf 'Predict data: will download official librime-predict asset and verify pinned SHA-256\n'
+else
+  printf 'Predict data: skipped by --no-download-predict\n'
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -211,15 +232,41 @@ elif [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   mv "$tmp_file" "$TARGET/$GRAM_FILE"
 fi
 
+if [ -f "$ROOT/$PREDICT_FILE" ]; then
+  cp -a "$ROOT/$PREDICT_FILE" "$TARGET/$PREDICT_FILE"
+elif [ ! -f "$TARGET/$PREDICT_FILE" ] && [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
+  tmp_file="$TARGET/$PREDICT_FILE.tmp"
+  rm -f "$tmp_file"
+  printf 'Downloading %s ...\n' "$PREDICT_FILE"
+  if ! curl -L --fail --output "$tmp_file" "$PREDICT_URL"; then
+    rm -f "$tmp_file"
+    exit 1
+  fi
+  actual_predict_sha="$(sha256_file "$tmp_file")"
+  if [ "$actual_predict_sha" != "$PREDICT_SHA256" ]; then
+    printf 'SHA-256 mismatch for %s\n' "$PREDICT_FILE" >&2
+    printf 'Expected: %s\n' "$PREDICT_SHA256" >&2
+    printf 'Actual:   %s\n' "$actual_predict_sha" >&2
+    rm -f "$tmp_file"
+    exit 1
+  fi
+  printf 'Verified %s SHA-256: %s\n' "$PREDICT_FILE" "$actual_predict_sha"
+  mv "$tmp_file" "$TARGET/$PREDICT_FILE"
+fi
+
 test -f "$TARGET/rime_ice.schema.yaml"
 test -f "$TARGET/rime_ice.dict.yaml"
 test -f "$TARGET/rime.lua"
 test -f "$TARGET/custom_phrase.txt"
+test -f "$TARGET/smart_chat_phrases.txt"
 test -f "$TARGET/lua/cold_word_drop/drop_words.lua"
 test -f "$TARGET/lua/cold_word_drop/hide_words.lua"
 test -f "$TARGET/lua/cold_word_drop/reduce_freq_words.lua"
 if [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   test -f "$TARGET/$GRAM_FILE"
+fi
+if [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
+  test -f "$TARGET/$PREDICT_FILE"
 fi
 
 printf 'Installed. Redeploy Rime/Squirrel/Weasel from the input-method menu.\n'

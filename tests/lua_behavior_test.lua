@@ -126,6 +126,84 @@ test("smart modes use deterministic code priority for legacy mixed state", funct
   expect_equal(output[3].text, "👍", "chat boost must not leak into code mode")
 end)
 
+test("chat mode boosts real emoji but never plain short Chinese words", function()
+  package.loaded.smart_mode_filter = nil
+  local module = require("smart_mode_filter")
+  local env = { engine = { context = fake_context({ smart_chat = true }, "test") } }
+  local output = collect(function()
+    module.func(input_from({ candidate("中文词"), candidate("短词"), candidate("👍"), candidate("其他") }), env)
+  end)
+  expect_equal(output[1].text, "中文词", "first candidate stays protected")
+  expect_equal(output[2].text, "👍", "emoji candidate should be boosted")
+  expect_equal(output[3].text, "短词", "short Chinese words must not be treated as emoji")
+  expect_equal(output[4].text, "其他")
+end)
+
+test("smart mode reorders within the cap and streams the tail", function()
+  package.loaded.smart_mode_filter = nil
+  local module = require("smart_mode_filter")
+  local candidates = {}
+  for i = 1, 150 do candidates[i] = candidate("候选" .. i) end
+  candidates[120] = candidate("GitHub")
+  local env = { engine = { context = fake_context({ smart_code = true }, "gh") } }
+  local output = collect(function() module.func(input_from(candidates), env) end)
+  expect_equal(#output, 150, "smart mode must not truncate deep paging")
+  local found = false
+  for _, cand in ipairs(output) do
+    if cand.text == "GitHub" then found = true end
+  end
+  expect(found, "tail candidates beyond the cap must still be yielded")
+end)
+
+test("pin_by_select disconnects its commit notifier on fini", function()
+  package.loaded.pin_by_select = nil
+  local root_dir = test_tmp_root
+  local old_rime_api = _G.rime_api
+  _G.rime_api = { get_user_data_dir = function() return root_dir end }
+  local disconnected = false
+  local connection = { disconnect = function() disconnected = true end }
+  local context = {
+    commit_notifier = { connect = function() return connection end },
+    get_commit_text = function() return "" end,
+  }
+  local env = { engine = { context = context } }
+  local module = require("pin_by_select")
+  module.init(env)
+  module.fini(env)
+  _G.rime_api = old_rime_api
+  expect(disconnected, "fini must disconnect the commit notifier")
+  os.remove(root_dir .. "/pin_by_select_v2.tsv")
+end)
+
+test("chat phrase file overrides built-in defaults and tolerates comments", function()
+  package.loaded.smart_assist_translator = nil
+  local module = require("smart_assist_translator")
+  local path = test_tmp_root .. "/smart_chat_phrases.txt"
+  local f = assert(io.open(path, "w"))
+  f:write("# comment line\n")
+  f:write("\n")
+  f:write("nihao\t你好\t你好呀\n")
+  f:write("BadCode!\t不该出现\n")
+  f:write("onlycode\n")
+  f:close()
+
+  local parsed = module._test.parse_phrase_file(path)
+  os.remove(path)
+  expect(parsed ~= nil, "phrase file should parse")
+  expect_equal(parsed["nihao"][1], "你好")
+  expect_equal(parsed["nihao"][2], "你好呀")
+  expect_equal(parsed["badcode!"], nil, "invalid codes must be rejected")
+  expect_equal(parsed["onlycode"], nil, "rows without phrases must be rejected")
+
+  expect_equal(module._test.parse_phrase_file(test_tmp_root .. "/definitely_missing.txt"), nil,
+    "missing file should fall back to defaults")
+  expect(module._test.defaults["xiexie"] ~= nil, "built-in defaults must keep common phrases")
+  expect(module._test.defaults["baoqian"] ~= nil, "built-in defaults must use the full pinyin for 抱歉")
+  expect(module._test.defaults["huitouliao"] ~= nil, "built-in defaults must use the full pinyin for 回头聊")
+  expect_equal(module._test.defaults["baoquan"], nil, "misspelled pinyin must not remain in defaults")
+  expect_equal(module._test.defaults["huitoulia"], nil, "truncated pinyin must not remain in defaults")
+end)
+
 test("chat assistant does not leak into code or write mode", function()
   package.loaded.smart_assist_translator = nil
   local module = require("smart_assist_translator")
@@ -204,15 +282,74 @@ test("context runtime map keeps untouched learning rows compact", function()
   os.remove(path .. ".tmp")
 end)
 
-test("context filter bounds lazy candidate enumeration", function()
+test("context filter passes the full stream through when disabled", function()
   package.loaded.context_boost_filter = nil
   local module = require("context_boost_filter")
   local candidates = {}
   for i = 1, 150 do candidates[i] = candidate("候选" .. i) end
   local env = { engine = { context = fake_context({ smart_context = false }, "test") } }
   local output = collect(function() module.func(input_from(candidates), env) end)
-  expect_equal(#output, 100, "filter must not force the whole lazy candidate stream")
-  expect_equal(output[100].text, "候选100")
+  expect_equal(#output, 150, "pass-through must not truncate deep paging")
+  expect_equal(output[150].text, "候选150")
+end)
+
+test("context filter reorders within the cap and streams the tail", function()
+  package.loaded.context_boost_filter = nil
+  local root_dir = test_tmp_root
+  os.remove(root_dir .. "/context_boost.tsv")
+  os.remove(root_dir .. "/context_boost.journal.tsv")
+
+  local old_rime_api = _G.rime_api
+  _G.rime_api = { get_user_data_dir = function() return root_dir end }
+  local callback
+  local committed = ""
+  local context = {
+    commit_notifier = { connect = function(_, fn) callback = fn end },
+    get_commit_text = function() return committed end,
+    get_option = function(_, name) return name == "smart_context" end,
+    input = "test",
+  }
+  local env = { engine = { context = context } }
+  local module = require("context_boost_filter")
+  module.init(env)
+  -- 学习 甲词→乙词，并把历史推回到「甲词」结尾，使乙词成为可提升项。
+  for _, text in ipairs({ "甲词", "乙词", "甲词" }) do
+    committed = text
+    callback(context)
+  end
+
+  local candidates = {}
+  for i = 1, 150 do candidates[i] = candidate("候选" .. i) end
+  candidates[50] = candidate("乙词")
+  local output = collect(function() module.func(input_from(candidates), env) end)
+  module.fini(env)
+  _G.rime_api = old_rime_api
+  os.remove(root_dir .. "/context_boost.tsv")
+  os.remove(root_dir .. "/context_boost.journal.tsv")
+
+  expect_equal(output[1].text, "乙词", "learned pair should be boosted to the top")
+  expect_equal(#output, 150, "reordering must keep the tail of the stream")
+  expect_equal(output[150].text, "候选150")
+end)
+
+test("context filter disconnects its commit notifier on fini", function()
+  package.loaded.context_boost_filter = nil
+  local root_dir = test_tmp_root
+  local old_rime_api = _G.rime_api
+  _G.rime_api = { get_user_data_dir = function() return root_dir end }
+  local disconnected = false
+  local connection = { disconnect = function() disconnected = true end }
+  local context = {
+    commit_notifier = { connect = function() return connection end },
+    get_commit_text = function() return "" end,
+  }
+  local env = { engine = { context = context } }
+  local module = require("context_boost_filter")
+  module.init(env)
+  module.fini(env)
+  _G.rime_api = old_rime_api
+  expect(disconnected, "fini must disconnect the commit notifier")
+  expect_equal(env.commit_connection, nil, "fini must clear the stored connection")
 end)
 
 test("context one-shot learning is active only in the current session", function()
@@ -428,6 +565,67 @@ test("context learns intentional repeated commits", function()
 
   os.remove(snapshot_path)
   os.remove(journal_path)
+end)
+
+test("cn_en_spacer stays inert until smart_space is enabled", function()
+  package.loaded.cn_en_spacer = nil
+  local module = require("cn_en_spacer")
+  local function shadowable(text)
+    local cand = candidate(text)
+    cand.to_shadow_candidate = function(self, _, new_text)
+      local shadow = candidate(new_text, self.type)
+      shadow.to_shadow_candidate = self.to_shadow_candidate
+      return shadow
+    end
+    return cand
+  end
+
+  local off_env = { engine = { context = fake_context({}, "vipzhongp") } }
+  local off = collect(function()
+    module.func(input_from({ shadowable("VIP中P") }), off_env)
+  end)
+  expect_equal(off[1].text, "VIP中P", "switch off must not rewrite candidates")
+
+  local on_env = { engine = { context = fake_context({ smart_space = true }, "vipzhongp") } }
+  local on = collect(function()
+    module.func(input_from({ shadowable("VIP中P"), shadowable("纯中文") }), on_env)
+  end)
+  expect_equal(on[1].text, "VIP 中 P", "mixed text should gain spaces when enabled")
+  expect_equal(on[2].text, "纯中文", "pure Chinese text must stay untouched")
+end)
+
+test("en_spacer adds a leading space only after an English commit", function()
+  package.loaded.en_spacer = nil
+  local module = require("en_spacer")
+  local function shadowable(text)
+    local cand = candidate(text)
+    cand.to_shadow_candidate = function(self, _, new_text)
+      local shadow = candidate(new_text, self.type)
+      shadow.to_shadow_candidate = self.to_shadow_candidate
+      return shadow
+    end
+    return cand
+  end
+  local function env_with(latest, options)
+    local context = fake_context(options or { smart_space = true }, "world")
+    context.commit_history = { latest_text = function() return latest end }
+    return { engine = { context = context } }
+  end
+
+  local off = collect(function()
+    module.func(input_from({ shadowable("world") }), env_with("hello", {}))
+  end)
+  expect_equal(off[1].text, "world", "switch off must not rewrite candidates")
+
+  local after_english = collect(function()
+    module.func(input_from({ shadowable("world") }), env_with("hello"))
+  end)
+  expect_equal(after_english[1].text, " world", "English after English should gain a space")
+
+  local after_chinese = collect(function()
+    module.func(input_from({ shadowable("world") }), env_with("你好"))
+  end)
+  expect_equal(after_chinese[1].text, "world", "English after Chinese must stay untouched")
 end)
 
 test("date trigger filter keeps each dynamic result first without dropping candidates", function()

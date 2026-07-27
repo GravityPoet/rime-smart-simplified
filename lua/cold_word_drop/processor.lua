@@ -128,7 +128,7 @@ function processor.init(env)
 		write_word_to_file(env, "reduce_freq")
 	end
 
-	engine.context.commit_notifier:connect(function(ctx)
+	env.commit_connection = engine.context.commit_notifier:connect(function(ctx)
 		local code = (ctx.input or ""):gsub(" ", "")
 		if code == "" then return end
 		local text = ctx:get_commit_text()
@@ -147,6 +147,14 @@ function processor.init(env)
 			write_word_to_file(env, "reduce_freq")
 		end
 	end)
+end
+
+function processor.fini(env)
+	-- 断开通知器，避免切换方案后旧回调残留导致重复记录和重复写盘。
+	if env and env.commit_connection then
+		if env.commit_connection.disconnect then env.commit_connection:disconnect() end
+		env.commit_connection = nil
+	end
 end
 
 function processor.func(key, env)

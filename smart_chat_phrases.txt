@@ -1,0 +1,29 @@
+# 聊天模式短语表（方案菜单切到「聊天」模式时生效）
+# 格式：编码<Tab>短语1<Tab>短语2…（编码为小写字母全拼，一行一条，# 开头为注释）
+# 本文件是公开模板；安装脚本只在目标目录没有该文件时安装，你的修改不会被覆盖。
+# 删除本文件后重新部署，会回落到内置默认短语表。
+zan	赞	👍	太赞了
+wanan	晚安	晚安 🌙
+zaoshanghao	早上好	早上好 ☀️
+zao	早	早上好
+kaixin	开心	😄
+xiexie	谢谢	谢谢 🙏	多谢
+okok	OKOK	👌
+haode	好的	好嘞	好哒
+meiwen	没问题	没问题 👌
+jiayou	加油	加油 💪
+baoqian	抱歉	不好意思
+buhaoyisi	不好意思	抱歉
+shoudao	收到	收到 👌
+zhidaole	知道了	了解
+mingbai	明白	明白了
+xinkule	辛苦了	辛苦啦
+mafanle	麻烦了	麻烦你了
+gaoding	搞定	搞定 ✅
+lihai	厉害	厉害 👍
+gongxi	恭喜	恭喜 🎉
+shengrikuaile	生日快乐	生日快乐 🎂
+xinniankuaile	新年快乐	新年快乐 🎉
+zhoumoyukuai	周末愉快	周末愉快 ☀️
+zaijian	再见	再见 👋
+huitouliao	回头聊	回头聊 👋
