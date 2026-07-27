@@ -232,7 +232,7 @@ test -f "$TMP_RIME_DIR/build/rime_ice.table.bin"
 test -f "$TMP_RIME_DIR/build/melt_eng.table.bin"
 test -f "$TMP_RIME_DIR/build/radical_pinyin.table.bin"
 grep -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
-grep -A1 -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" | grep 'reset: 1' >/dev/null
+grep -A1 -E '^[[:space:]]*name: prediction$' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" | grep 'reset: 0' >/dev/null
 grep 'max_candidates: 9' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'max_iterations: 2' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
 grep 'simplifier@prediction_simplify' "$TMP_RIME_DIR/build/rime_ice.schema.yaml" >/dev/null
