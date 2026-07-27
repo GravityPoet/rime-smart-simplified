@@ -86,7 +86,7 @@ RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 
 常用输入：`rq` / `sj` / `xq` / `dt`（日期、时间、星期、日期时间，UTC+8）、`nl`（农历）、`uuid`（随机 UUID）。候选翻页使用 `-`、`=`、`[`、`]`；组词时按 `Shift` 可临时输入英文。
 
-提交后预测默认开启，并会在每次新会话重置为开启。安装脚本会自动下载官方 `predict.db` 预测数据（librime-predict `data-1.0`，固定 SHA-256 校验）；不习惯联想菜单占用空格或数字键时，可在方案菜单临时关闭「预测」。普通拼音输入不依赖预测数据库；不需要该文件时可用 `--no-download-predict`（Windows：`-NoDownloadPredict`）跳过。
+提交后预测默认关闭，并会在每次新会话重置为关闭，避免联想候选打断连续输入。安装脚本会自动下载官方 `predict.db` 预测数据（librime-predict `data-1.0`，固定 SHA-256 校验）；需要时可在方案菜单临时打开「预测」。普通拼音输入不依赖预测数据库；不需要该文件时可用 `--no-download-predict`（Windows：`-NoDownloadPredict`）跳过。
 
 中英混排自动空格（如 `VIP中P` → `VIP 中 P`、连续英文自动加空格）由方案菜单「空格」开关控制，默认关闭，状态会被记住。
 

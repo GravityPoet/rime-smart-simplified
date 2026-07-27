@@ -113,7 +113,7 @@ Common inputs:
 | `Shift` | Temporary English while composing |
 | `-`, `=`, `[`, `]` | Candidate paging |
 
-Post-commit prediction is on by default and resets to on for each new session. The installer downloads the official `predict.db` prediction data automatically (librime-predict `data-1.0`, verified against a pinned SHA-256); if the prediction menu taking over Space or number keys does not suit you, temporarily turn "预测" off from the scheme menu. Ordinary pinyin input does not require the prediction database. Use `--no-download-predict` (Windows: `-NoDownloadPredict`) to skip it.
+Post-commit prediction is off by default and resets to off for each new session so prediction candidates do not interrupt continuous typing. The installer downloads the official `predict.db` prediction data automatically (librime-predict `data-1.0`, verified against a pinned SHA-256); turn "预测" on temporarily from the scheme menu when needed. Ordinary pinyin input does not require the prediction database. Use `--no-download-predict` (Windows: `-NoDownloadPredict`) to skip it.
 
 Automatic spacing between Chinese and English (e.g. `VIP中P` → `VIP 中 P`, plus a leading space for consecutive English words) is controlled by the "空格" scheme-menu switch, off by default and remembered across sessions.
 
