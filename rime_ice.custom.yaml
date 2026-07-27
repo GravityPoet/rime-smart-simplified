@@ -19,12 +19,20 @@ patch:
     - name: prediction
       states: [ 预测关, 预测 ]
       abbrev: [ 预关, 预 ]
-      # 自动预测会保持一段候选组合，可能干扰复制、粘贴等系统快捷键；默认关闭，按需临时开启。
-      reset: 0
+      # 上屏后自动联想（搜狗式）。卡顿问题已修复：预测段跳过全部重排 filter、
+      # 学习回调不再重复挂载。默认开启；如果不习惯联想菜单占用空格/数字键，
+      # 在方案菜单随时关闭（每次新会话会重置为开启）。
+      reset: 1
     - name: smart_context
       states: [ 上下文关, 上下文 ]
       abbrev: [ 文关, 文 ]
       reset: 1
+    - name: smart_space
+      states: [ 空格关, 空格 ]
+      abbrev: [ 隔关, 隔 ]
+      # 中英混排自动加空格（微信输入法式体验）。会改变上屏文本，默认关闭，
+      # 需要时在方案菜单打开，状态会被记住。
+      reset: 0
     # 场景模式互斥：方案菜单只显示一个入口，避免聊天/写作/代码同时开启。
     - options: [ smart_normal, smart_chat, smart_write, smart_code ]
       states: [ 常规, 聊天, 写作, 代码 ]
@@ -80,6 +88,8 @@ patch:
     - lua_filter@short_code_clean_filter
     - lua_filter@cold_word_drop_filter
     - lua_filter@rq_date_first_filter
+    - lua_filter@cn_en_spacer
+    - lua_filter@en_spacer
     - uniquifier
 
   # 搜狗感增强：只保留高收益模糊音，避免过宽容错导致候选噪声暴涨
@@ -155,6 +165,47 @@ patch:
     - derive/^([jqxy])u/$1v/
     - derive/^([nl])ue$/$1ve/
     - derive/^([jqxy])v/$1u/
+    # === 自动纠错（雾凇上游圈外安全集：手滑换位/漏键，均带声母约束，
+    # 不含对全拼简拼混输有副作用的 zh/ch/sh 换位圈内规则）===
+    # ai / ei / ie
+    - derive/^([wghk])ai$/$1ia/           # wia → wai
+    - derive/([wfghkz])ei$/$1ie/          # wie → wei
+    - derive/([jqx])ie$/$1ei/             # jei → jie
+    # ao / ou
+    - derive/([rtypsdghklzcbnm])ao$/$1oa/
+    - derive/([ypfm])ou$/$1uo/
+    # ang / eng / ing / ong 换位
+    - derive/([wrtypsdfghklzcbnm])ang$/$1nag/
+    - derive/([wrtypsdfghklzcbnm])ang$/$1agn/
+    - derive/([wrtpsdfghklzcbnm])eng$/$1neg/
+    - derive/([wrtpsdfghklzcbnm])eng$/$1egn/
+    - derive/([qtypdjlxbnm])ing$/$1nig/
+    - derive/([rtysdghklzcn])ong$/$1nog/
+    - derive/([rtysdghklzcn])ong$/$1ogn/
+    # iao / ui / iu / iang
+    - derive/([qtpdjlxbnm])iao$/$1ioa/
+    - derive/([qtpdjlxbnm])iao$/$1oia/
+    - derive/([rtsghkzc])ui$/$1iu/
+    - derive/([qjlxnm])iu$/$1ui/
+    - derive/([qjlxn])iang$/$1aing/
+    - derive/([qjlxn])iang$/$1inag/
+    # ua / uai / uan / ue / uang / iong
+    - derive/([g|k|h|zh|sh])ua$/$1au/
+    - derive/([g|h|k|zh|ch|sh])uai$/$1aui/
+    - derive/([qrtysdghjklzxcn])uan$/$1aun/
+    - derive/([nlyjqx])ue$/$1eu/
+    - derive/([g|h|k|zh|ch|sh])uang$/$1aung/
+    - derive/([g|h|k|zh|ch|sh])uang$/$1uagn/
+    - derive/([g|h|k|zh|ch|sh])uang$/$1unag/
+    - derive/([g|h|k|zh|ch|sh])uang$/$1augn/
+    - derive/([jqx])iong$/$1inog/
+    - derive/([jqx])iong$/$1oing/
+    - derive/([jqx])iong$/$1iogn/
+    - derive/([jqx])iong$/$1oign/
+    # 漏键补全
+    - derive/([rtsdghkzc])o(u|ng)$/$1o/   # do → dou|dong
+    - derive/(.+)ong$/$1on/               # lon → long
+    - derive/([qwrtypsdfghjklzxcbnm])([aeio])ng$/$1ng/  # lng → lang|leng|ling|long
   # ASCII 缩写扩展、短码降噪与计数式软置顶已在 engine 链路中显式挂载
   # 静态置顶：高频短码先固定常用中文，再交给学习排序微调
   pin_cand_filter:

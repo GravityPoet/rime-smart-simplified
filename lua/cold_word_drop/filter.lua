@@ -83,6 +83,22 @@ function filter.func(input, env)
 		return
 	end
 
+	-- 预测联想段每次上屏后触发，负反馈针对拼音候选记录（预测段无输入码，
+	-- 记录也对不上），直接流式通过，减少上屏后的隐性成本。
+	local in_prediction = (function()
+		local ok, hit = pcall(function()
+			local composition = context.composition
+			if not composition or composition:empty() then return false end
+			local seg = composition:back()
+			return seg and seg:has_tag("prediction") or false
+		end)
+		return ok and hit
+	end)()
+	if in_prediction then
+		for cand in input:iter() do yield(cand) end
+		return
+	end
+
 	for cand in input:iter() do
 		local cand_text = cand.text:gsub(" ", "")
 		local preedit_code = ((cand.preedit and cand.preedit ~= "") and cand.preedit or preedit_str):gsub(" ", "")

@@ -4,7 +4,8 @@ param(
     [switch]$DryRun,
     [switch]$NoBackup,
     [switch]$NoDownloadGram,
-    [switch]$SkipVerifyGram
+    [switch]$SkipVerifyGram,
+    [switch]$NoDownloadPredict
 )
 
 Set-StrictMode -Version Latest
@@ -14,6 +15,12 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $GramFile = "wanxiang-lts-zh-hans.gram"
 $GramUrl = "https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram"
 $GramApiUrl = "https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS"
+# librime-predict official data (Traditional Chinese; the schema converts
+# predictions to Simplified via prediction_simplify). The release is old and
+# has no GitHub digest, so we pin a known SHA-256.
+$PredictFile = "predict.db"
+$PredictUrl = "https://github.com/rime/librime-predict/releases/download/data-1.0/predict.db"
+$PredictSha256 = "2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be"
 $PrivateStateFiles = @(
     "lua/cold_word_drop/drop_words.lua",
     "lua/cold_word_drop/hide_words.lua",
@@ -51,6 +58,11 @@ if (-not (Test-Path -LiteralPath $CustomPhraseTarget)) {
     $Manifest += "custom_phrase.txt"
 }
 
+$ChatPhrasesTarget = Join-Path $Target "smart_chat_phrases.txt"
+if (-not (Test-Path -LiteralPath $ChatPhrasesTarget)) {
+    $Manifest += "smart_chat_phrases.txt"
+}
+
 foreach ($directory in @("cn_dicts", "cn_dicts_wanxiang", "en_dicts")) {
     $Manifest += Get-ChildItem -LiteralPath (Join-Path $Root $directory) -File -Recurse |
         Where-Object { $_.Name -like "*.dict.yaml" -or $_.Extension -eq ".txt" } |
@@ -72,6 +84,7 @@ $Manifest += Get-ChildItem -LiteralPath (Join-Path $Root "opencc") -File -Recurs
 $Manifest = @($Manifest | Sort-Object -Unique)
 $DownloadGram = -not $NoDownloadGram
 $VerifyGram = -not $SkipVerifyGram
+$DownloadPredict = -not $NoDownloadPredict
 
 Write-Output "Target: $Target"
 Write-Output "Backup decision: overwrite-capable local config install; backup is enabled by default."
@@ -101,6 +114,18 @@ if (Test-Path -LiteralPath $SourceGram -PathType Leaf) {
     }
 } else {
     Write-Output "Grammar model: skipped by -NoDownloadGram"
+}
+
+$SourcePredict = Join-Path $Root $PredictFile
+$TargetPredict = Join-Path $Target $PredictFile
+if (Test-Path -LiteralPath $SourcePredict -PathType Leaf) {
+    Write-Output "Predict data: will copy local $PredictFile"
+} elseif (Test-Path -LiteralPath $TargetPredict -PathType Leaf) {
+    Write-Output "Predict data: already exists at target"
+} elseif ($DownloadPredict) {
+    Write-Output "Predict data: will download official librime-predict asset and verify pinned SHA-256"
+} else {
+    Write-Output "Predict data: skipped by -NoDownloadPredict"
 }
 
 if ($DryRun) {
@@ -179,11 +204,35 @@ if (Test-Path -LiteralPath $SourceGram -PathType Leaf) {
     }
 }
 
+if (Test-Path -LiteralPath $SourcePredict -PathType Leaf) {
+    Copy-Item -LiteralPath $SourcePredict -Destination $TargetPredict -Force
+} elseif ((-not (Test-Path -LiteralPath $TargetPredict -PathType Leaf)) -and $DownloadPredict) {
+    $TemporaryPredict = "$TargetPredict.tmp"
+    if (Test-Path -LiteralPath $TemporaryPredict) {
+        Remove-Item -LiteralPath $TemporaryPredict -Force
+    }
+    try {
+        Write-Output "Downloading $PredictFile ..."
+        Invoke-WebRequest -Uri $PredictUrl -OutFile $TemporaryPredict
+        $ActualPredictSha = (Get-FileHash -LiteralPath $TemporaryPredict -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ActualPredictSha -ne $PredictSha256) {
+            throw "SHA-256 mismatch for $PredictFile. Expected $PredictSha256; actual $ActualPredictSha"
+        }
+        Write-Output "Verified $PredictFile SHA-256: $ActualPredictSha"
+        Move-Item -LiteralPath $TemporaryPredict -Destination $TargetPredict -Force
+    } finally {
+        if (Test-Path -LiteralPath $TemporaryPredict) {
+            Remove-Item -LiteralPath $TemporaryPredict -Force
+        }
+    }
+}
+
 foreach ($required in @(
     "rime_ice.schema.yaml",
     "rime_ice.dict.yaml",
     "rime.lua",
     "custom_phrase.txt",
+    "smart_chat_phrases.txt",
     "lua/cold_word_drop/drop_words.lua",
     "lua/cold_word_drop/hide_words.lua",
     "lua/cold_word_drop/reduce_freq_words.lua"
@@ -194,6 +243,9 @@ foreach ($required in @(
 }
 if ($DownloadGram -and -not (Test-Path -LiteralPath $TargetGram -PathType Leaf)) {
     throw "Installation verification failed: missing $GramFile"
+}
+if ($DownloadPredict -and -not (Test-Path -LiteralPath $TargetPredict -PathType Leaf)) {
+    throw "Installation verification failed: missing $PredictFile"
 }
 
 Write-Output "Installed. Redeploy Rime/Squirrel/Weasel from the input-method menu."

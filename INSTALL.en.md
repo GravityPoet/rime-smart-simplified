@@ -72,7 +72,7 @@ RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 
 Your Linux distribution may also require its Rime, Lua, or grammar-model support packages. Package names vary by distribution.
 
-The installers create a timestamped backup before overwriting files, preserve an existing `custom_phrase.txt` and cold-word preference files, and verify the grammar model before moving it from its temporary download path.
+The installers create a timestamped backup before overwriting files, preserve existing `custom_phrase.txt`, `smart_chat_phrases.txt`, and cold-word preference files, and verify the grammar model before moving it from its temporary download path.
 
 ## 2. Dry run and advanced options
 
@@ -85,10 +85,11 @@ RIME_USER_DIR="$HOME/Library/Rime" bash ./scripts/install.sh --dry-run
 Options:
 
 - `--no-download-gram`: install configuration without downloading the roughly 401 MB Wanxiang LTS grammar model.
+- `--no-download-predict`: skip downloading the 7 MB official `predict.db` prediction data (librime-predict `data-1.0`, verified against a pinned SHA-256).
 - `--skip-verify-gram`: download without the GitHub asset digest check. Use only when the API is unavailable and you accept the risk.
 - `--no-backup`: skip backups. Not recommended for ordinary upgrades.
 
-PowerShell equivalents are `-DryRun`, `-NoDownloadGram`, `-SkipVerifyGram`, and `-NoBackup`.
+PowerShell equivalents are `-DryRun`, `-NoDownloadGram`, `-SkipVerifyGram`, `-NoDownloadPredict`, and `-NoBackup`.
 
 ## 3. Deploy and verify the first use
 
@@ -112,7 +113,9 @@ Common inputs:
 | `Shift` | Temporary English while composing |
 | `-`, `=`, `[`, `]` | Candidate paging |
 
-Post-commit prediction is off by default. If your frontend provides a compatible local `predict.db`, you can enable it temporarily from the scheme menu; ordinary pinyin input does not require it.
+Post-commit prediction is on by default and resets to on for each new session. The installer downloads the official `predict.db` prediction data automatically (librime-predict `data-1.0`, verified against a pinned SHA-256); if the prediction menu taking over Space or number keys does not suit you, temporarily turn "预测" off from the scheme menu. Ordinary pinyin input does not require the prediction database. Use `--no-download-predict` (Windows: `-NoDownloadPredict`) to skip it.
+
+Automatic spacing between Chinese and English (e.g. `VIP中P` → `VIP 中 P`, plus a leading space for consecutive English words) is controlled by the "空格" scheme-menu switch, off by default and remembered across sessions.
 
 ## 4. Install from source (developers)
 
@@ -164,4 +167,4 @@ The learning layer also keeps `context_boost.tsv.bak.pre-journal-v2` before its 
 - `pin_by_select*.tsv`, `predict.db`, and `*.userdb/`
 - `sync/`, `build/`, `installation.yaml`, and `user.yaml`
 - `*.gram`
-- Any `custom_phrase.txt` containing personal information
+- Any `custom_phrase.txt` or `smart_chat_phrases.txt` containing personal information

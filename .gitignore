@@ -3,6 +3,7 @@
 *.bak.*
 *.tmp
 *.log
+*.backup.*/
 
 # Rime build/runtime output
 build/

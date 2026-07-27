@@ -14,6 +14,8 @@ try("smart_mode_filter", "smart_mode_filter")
 try("smart_assist_translator", "smart_assist_translator")
 try("short_code_clean_filter", "short_code_clean_filter")
 try("rq_date_first_filter", "rq_date_first_filter")
+try("cn_en_spacer", "cn_en_spacer")
+try("en_spacer", "en_spacer")
 try("cold_word_drop.processor", "cold_word_drop_processor")
 try("cold_word_drop.filter", "cold_word_drop_filter")
 
