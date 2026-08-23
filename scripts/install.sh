@@ -124,6 +124,25 @@ find_symlink_component() {
   return 1
 }
 
+file_link_count() {
+  file_path="$1"
+  if link_count="$(stat -c '%h' "$file_path" 2>/dev/null)"; then
+    printf '%s\n' "$link_count"
+    return 0
+  fi
+  stat -f '%l' "$file_path"
+}
+
+find_hardlink_path() {
+  rel="$1"
+  path="$TARGET/$rel"
+  if [ -f "$path" ] && [ "$(file_link_count "$path")" -gt 1 ]; then
+    printf '%s\n' "$path"
+    return 0
+  fi
+  return 1
+}
+
 trap cleanup EXIT
 
 usage() {
@@ -151,6 +170,18 @@ sha256_file() {
     printf 'Neither shasum nor sha256sum is available; cannot verify %s\n' "$1" >&2
     exit 1
   fi
+}
+
+assert_safe_manifest_value() {
+  value="$1"
+  label="$2"
+  case "$value" in
+    ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:+/@=-]*)
+      printf '%s contains characters that cannot be represented safely in the ownership manifest.\n' \
+        "$label" >&2
+      exit 1
+      ;;
+  esac
 }
 
 verify_gram_digest() {
@@ -277,6 +308,19 @@ if [ -s "$TARGET_SYMLINKS" ]; then
   exit 1
 fi
 
+TARGET_HARDLINKS="$WORK_DIR/target-hardlinks"
+: > "$TARGET_HARDLINKS"
+while IFS= read -r rel; do
+  if hardlink_path="$(find_hardlink_path "$rel")"; then
+    printf '%s\n' "$hardlink_path" >> "$TARGET_HARDLINKS"
+  fi
+done < "$INSTALL_PATHS"
+if [ -s "$TARGET_HARDLINKS" ]; then
+  printf 'Refusing to overwrite hard-linked files below the Rime target; replace these files first to protect external paths:\n' >&2
+  sed 's/^/  /' "$TARGET_HARDLINKS" >&2
+  exit 1
+fi
+
 MARKER_PATH="$TARGET/$INSTALL_MANIFEST_NAME"
 if [ -L "$MARKER_PATH" ]; then
   printf 'Refusing to overwrite a symlinked install manifest: %s\n' "$MARKER_PATH" >&2
@@ -284,6 +328,10 @@ if [ -L "$MARKER_PATH" ]; then
 fi
 if [ -e "$MARKER_PATH" ] && [ ! -f "$MARKER_PATH" ]; then
   printf 'Refusing to overwrite a non-regular install manifest: %s\n' "$MARKER_PATH" >&2
+  exit 1
+fi
+if [ -f "$MARKER_PATH" ] && [ "$(file_link_count "$MARKER_PATH")" -gt 1 ]; then
+  printf 'Refusing to overwrite a hard-linked install manifest; replace it first to protect external paths: %s\n' "$MARKER_PATH" >&2
   exit 1
 fi
 
@@ -453,6 +501,8 @@ if command -v git >/dev/null 2>&1; then
   PACKAGE_VERSION="${RIME_PACKAGE_VERSION:-$(git describe --tags --always 2>/dev/null || printf 'unknown')}"
   SOURCE_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 fi
+assert_safe_manifest_value "$PACKAGE_VERSION" RIME_PACKAGE_VERSION
+assert_safe_manifest_value "$SOURCE_REVISION" SOURCE_REVISION
 {
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue

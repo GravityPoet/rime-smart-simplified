@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Precise removal for files owned by this package. Dry-run is the default;
 # --apply is required for deletion. Edited/private files are preserved.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET=""
 APPLY=0
 BACKUP=1
@@ -14,6 +15,8 @@ PRESERVED=""
 MISSING=""
 DELETED_FILES=""
 BACKUP_DIR=""
+PACKAGE_PATHS=""
+MANIFEST_RECORDS=""
 
 cleanup() {
   [ -z "$WORK_DIR" ] || rm -rf "$WORK_DIR"
@@ -92,6 +95,78 @@ valid_relative_path() {
   return 0
 }
 
+build_package_allowlist() {
+  {
+    find . -maxdepth 1 -type f \
+      \( \
+        \( -name '*.yaml' ! -name 'user.yaml' ! -name 'installation.yaml' \) \
+        -o -name 'rime.lua' \
+      \)
+    find ./cn_dicts ./cn_dicts_wanxiang ./en_dicts -type f \
+      \( -name '*.dict.yaml' -o -name '*.txt' \)
+    find ./lua -type f -name '*.lua'
+    find ./opencc -type f \( -name '*.json' -o -name '*.txt' \)
+    printf '%s\n' \
+      "custom_phrase.txt" \
+      "smart_chat_phrases.txt" \
+      "$GRAM_FILE" \
+      "$PREDICT_FILE" \
+      "$MANIFEST_NAME"
+  } 2>/dev/null \
+    | sed 's#^\./##' \
+    | sort -u > "$PACKAGE_PATHS"
+}
+
+expected_asset_sha() {
+  rel="$1"
+  case "$rel" in
+    "$GRAM_FILE")
+      grep -A4 '"asset": "wanxiang-lts-zh-hans.gram"' "$ROOT/UPSTREAM_ASSETS.lock.json" |
+        sed -n 's/.*"digest": "sha256:\([0-9a-fA-F]\{64\}\)".*/\1/p' |
+        head -n 1
+      ;;
+    "$PREDICT_FILE")
+      grep -A3 '"asset": "predict.db"' "$ROOT/UPSTREAM_ASSETS.lock.json" |
+        sed -n 's/.*"sha256": "\([0-9a-fA-F]\{64\}\)".*/\1/p' |
+        head -n 1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+validate_manifest_source() {
+  rel="$1"
+  installed_sha_arg="$2"
+  source_sha="$3"
+  ownership="$4"
+  if [ "$source_sha" != "$installed_sha_arg" ]; then
+    printf 'Ownership manifest source/install digest mismatch; refusing deletion: %s\n' "$rel" >&2
+    return 1
+  fi
+  case "$ownership" in
+    managed)
+      source_path="$ROOT/$rel"
+      if [ ! -f "$source_path" ] || [ -L "$source_path" ]; then
+        printf 'Ownership manifest source is unavailable; refusing deletion: %s\n' "$rel" >&2
+        return 1
+      fi
+      expected_sha="$(sha256_file "$source_path")"
+      ;;
+    asset-created)
+      expected_sha="$(expected_asset_sha "$rel")"
+      if [ -z "$expected_sha" ]; then
+        printf 'Ownership manifest asset is not pinned; refusing deletion: %s\n' "$rel" >&2
+        return 1
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+  if [ "$source_sha" != "$expected_sha" ]; then
+    printf 'Ownership manifest source digest does not match the package lock: %s\n' "$rel" >&2
+    return 1
+  fi
+}
+
 print_plan() {
   printf 'Target: %s\n' "$TARGET"
   printf 'Ownership manifest: %s\n' "$TARGET/$MANIFEST_NAME"
@@ -153,11 +228,26 @@ CANDIDATE_DIGESTS="$WORK_DIR/candidate-digests"
 PRESERVED="$WORK_DIR/preserved"
 MISSING="$WORK_DIR/missing"
 DELETED_FILES="$WORK_DIR/deleted"
+PACKAGE_PATHS="$WORK_DIR/package-paths"
+MANIFEST_RECORDS="$WORK_DIR/manifest-records"
 : > "$CANDIDATES"
 : > "$CANDIDATE_DIGESTS"
 : > "$PRESERVED"
 : > "$MISSING"
 : > "$DELETED_FILES"
+: > "$MANIFEST_RECORDS"
+
+# The manifest is user-visible state, so it is both tamper-evident and
+# constrained to paths that this package can actually install. The source
+# record hash catches accidental/manual edits; the allow-list prevents an
+# appended arbitrary private path from becoming a deletion candidate even if
+# somebody also rewrites the header hash.
+GRAM_FILE="wanxiang-lts-zh-hans.gram"
+PREDICT_FILE="predict.db"
+(
+  cd "$ROOT"
+  build_package_allowlist
+)
 
 MARKER_PATH="$TARGET/$MANIFEST_NAME"
 if [ -L "$MARKER_PATH" ]; then
@@ -176,12 +266,27 @@ if [ "$first_line" != '# rime-smart-simplified install manifest v2' ]; then
   exit 1
 fi
 
+source_hash_header_count="$(grep -c '^# source_hash=sha256:' "$MARKER_PATH" || true)"
+if [ "$source_hash_header_count" -ne 1 ]; then
+  printf 'Ownership manifest is missing a unique source hash; refusing deletion: %s\n' "$MARKER_PATH" >&2
+  exit 1
+fi
+expected_source_hash="$(sed -n 's/^# source_hash=sha256:\([0-9A-Fa-f]\{64\}\)$/\1/p' "$MARKER_PATH")"
+if [ -z "$expected_source_hash" ]; then
+  printf 'Ownership manifest source hash is invalid; refusing deletion: %s\n' "$MARKER_PATH" >&2
+  exit 1
+fi
+
 while IFS="$(printf '\t')" read -r kind rel installed_sha source_sha ownership extra; do
   case "$kind" in
     ""|\#*) continue ;;
     file)
       if [ -n "$extra" ] || ! valid_relative_path "$rel"; then
         printf 'Invalid ownership manifest entry; refusing to continue: %s\n' "$rel" >&2
+        exit 1
+      fi
+      if ! grep -F -x -- "$rel" "$PACKAGE_PATHS" >/dev/null 2>&1; then
+        printf 'Ownership manifest path is not installable by this package; refusing deletion: %s\n' "$rel" >&2
         exit 1
       fi
       if ! printf '%s\n' "$installed_sha" | grep -E '^[0-9A-Fa-f]{64}$' >/dev/null 2>&1 || \
@@ -193,6 +298,12 @@ while IFS="$(printf '\t')" read -r kind rel installed_sha source_sha ownership e
         managed|asset-created) ;;
         *) printf 'Unsupported ownership class for %s: %s\n' "$rel" "$ownership" >&2; exit 1 ;;
       esac
+      validate_manifest_source "$rel" "$installed_sha" "$source_sha" "$ownership" || exit 1
+      if grep -F -x -- "$rel" "$MANIFEST_RECORDS" >/dev/null 2>&1; then
+        printf 'Duplicate ownership manifest entry: %s\n' "$rel" >&2
+        exit 1
+      fi
+      printf '%s\t%s\t%s\n' "$rel" "$source_sha" "$ownership" >> "$MANIFEST_RECORDS"
       if symlink_path="$(find_symlink_component "$rel")"; then
         printf 'Refusing to inspect through a symlink below the Rime target: %s\n' "$symlink_path" >&2
         exit 1
@@ -217,6 +328,15 @@ while IFS="$(printf '\t')" read -r kind rel installed_sha source_sha ownership e
     *) printf 'Unknown ownership manifest record: %s\n' "$kind" >&2; exit 1 ;;
   esac
 done < "$MARKER_PATH"
+
+actual_source_hash="$(sha256_file "$MANIFEST_RECORDS")"
+expected_source_hash_lower="$(printf '%s' "$expected_source_hash" | tr '[:upper:]' '[:lower:]')"
+if [ "$actual_source_hash" != "$expected_source_hash_lower" ]; then
+  printf 'Ownership manifest source hash mismatch; refusing deletion: %s\n' "$MARKER_PATH" >&2
+  printf 'Expected: %s\n' "$expected_source_hash" >&2
+  printf 'Actual:   %s\n' "$actual_source_hash" >&2
+  exit 1
+fi
 
 # The marker itself is tool-owned metadata, but keep it when any owned file
 # was edited so a later run can still identify and remove the remaining files.
