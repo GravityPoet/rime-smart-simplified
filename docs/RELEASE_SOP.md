@@ -26,27 +26,37 @@ not a signed application or installer.
 ## Preconditions
 
 - Required tools: `git`, authenticated `gh`, `bash`, `lua`, `luac`,
-  `rime_deployer`, `curl`, `shasum`, and `unzip`
+  `rime_deployer`, `curl`, `python3`, `shasum`, `unzip`, and `actionlint`
 - Dependency install: none; CI installs `lua5.4` and `librime-bin`
 - Required clean state: `git status --short --branch` has no unrelated changes
 - Required remote state: local `main` is based on current `origin/main`, the target
   tag and Release do not exist, and the operator has repository admin permission
-- Required CI state: the `CI` workflow succeeds for the exact release commit before
-  the tag is pushed
+- Required CI state: the exact release commit has successful GitHub Actions checks
+  named `verify`, `windows-installer`, `macos-rime`, `linux-frontends`, and
+  `upstream-freshness` before the tag is pushed
 - Primary path: local verification and archive creation, push `main`, wait for CI,
   push the annotated tag, then create the GitHub Release with archive and checksum
 - CI evidence path: inspect the tracked workflow, then query the commit Check Runs
-  endpoint with `gh api` by exact SHA and require the GitHub Actions `verify` check
-  to complete successfully. Do not use `gh workflow list`, `gh run list`, or the
-  Actions Run Detail endpoint while those endpoints are returning 503
+  endpoint with `gh api` by exact SHA and require all five named GitHub Actions
+  checks to complete successfully. Do not use `gh workflow list`, `gh run list`, or
+  the Actions Run Detail endpoint while those endpoints are returning 503
 
 ### Release quality gates
 
 - Critical non-stubbed workflow: `./scripts/verify.sh` runs Lua behavior tests,
   install-manifest and private-state preservation tests, live upstream digest parsing,
   an isolated install, and a real `rime_deployer --build`
+- Release archive boundary: `scripts/check_release_archive.sh` creates a temporary
+  `git archive` from the exact release ref, verifies all platform entry points and
+  rejects ownership manifests, benchmark output, user/runtime databases, model
+  files, build output, and rollback/backup data
 - Local fixtures/models/services: the release excludes `*.gram`; the installer obtains
   the rolling upstream grammar model and validates its GitHub asset digest
+- Pinned upstream assets: `UPSTREAM_ASSETS.lock.json` records the exact Wanxiang
+  dictionary commit/blob SHAs, the current LTS grammar digest, and the prediction
+  asset metadata. `scripts/check_upstream_freshness.sh --strict` must pass for a
+  release; it performs metadata/API checks only and never writes the live Rime
+  directory or downloads user data.
 - Marketed-locale strict i18n: not applicable; this package has no localized application UI
 - Platform package assets: no application binary or updater metadata is distributed;
   the ZIP includes a macOS `.command`, Windows `.cmd`/PowerShell entry point, and the
@@ -63,7 +73,7 @@ All commands run from the repository root.
 ### Tool and privacy preflight
 
 ```bash
-command -v git gh bash lua luac rime_deployer curl shasum unzip
+command -v git gh bash lua luac rime_deployer curl python3 shasum unzip actionlint
 gh auth status
 git status --short --branch
 git remote -v
@@ -75,7 +85,7 @@ if git grep -nEi 'YOUR_HANDLE|YOUR_EMAIL|YOUR_PHONE|YOUR_PRIVATE_PROJECT' -- \
   exit 1
 fi
 
-if git ls-files | rg '(^|/)(.*\.bak($|\.)|.*\.backup\.|.*\.userdb($|/)|predict\.db$|context_boost.*\.tsv$|pin_by_select.*\.tsv$)'; then
+if git ls-files | rg '(^|/)(.*\.bak($|\.)|.*\.backup\.|.*\.userdb($|/)|predict\.db$|.*\.gram$|\.rime-smart-simplified\.install-manifest$|benchmark-results\.jsonl$|context_boost.*\.tsv$|pin_by_select.*\.tsv$|runLog\.txt$)'; then
   printf 'Tracked runtime or backup data must not enter a release archive.\n' >&2
   exit 1
 fi
@@ -97,11 +107,54 @@ EOF
 ```bash
 ./scripts/verify.sh
 git diff --check
+./scripts/check_release_archive.sh
+
+# Local integrity check (works without network and must always pass)
+./scripts/check_upstream_freshness.sh --local-only --strict
+
+# Release/CI freshness check (requires GitHub API access)
+./scripts/check_upstream_freshness.sh --strict
 ```
 
 The exact release commit must then pass GitHub Actions `CI`. The isolated
 `rime_deployer` build is the macOS/Linux package-compatibility proof; do not modify
 the operator's live Rime user directory merely to satisfy the release gate.
+
+### Upstream dictionary/model maintenance
+
+`cn_dicts_wanxiang/` is a checked-in snapshot of only the seven dictionaries
+listed in `UPSTREAM_ASSETS.lock.json`. The update command is read-only by default:
+
+```bash
+./scripts/update_dicts.sh
+```
+
+To refresh those seven files, preserving the unrelated `cn_dicts/` user/domain
+词库, run:
+
+```bash
+./scripts/update_dicts.sh --apply
+./scripts/check_upstream_freshness.sh --local-only --strict
+./scripts/verify.sh
+```
+
+`--apply` downloads only the pinned GitHub commit, verifies every Git blob SHA
+and a minimum line-count ratio, creates a timestamped sibling backup, updates
+`.upstream-commit`, and atomically refreshes the dictionary section of the lock
+file. A failed download or safety check leaves that dictionary unchanged; if a
+later verification fails, restore the seven files and `.upstream-commit` from the
+reported `cn_dicts_wanxiang.backup.<timestamp>` directory, then rerun the local
+lock check. Never replace `cn_dicts/41448.dict.yaml`, `smart_terms.dict.yaml`, or
+`smart_finance.dict.yaml` with this command.
+
+The grammar release is intentionally rolling. The lock freshness policy currently
+flags dictionary commits or grammar assets older than 180 days. The old
+`librime-predict` `data-1.0` release has no GitHub digest; its known SHA-256,
+size, and timestamp remain pinned and the installer verifies the SHA-256 after
+download. A stale warning is allowed in ordinary non-strict local development,
+but release/CI must use `--strict`. Exit status `2` means GitHub/API/network
+metadata was unavailable; callers may use `--offline-ok` for an explicitly
+offline local check, but never for a release.
 
 ### Package and checksums
 
@@ -159,14 +212,15 @@ ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
 git push origin main
 
 TARGET_SHA="$(git rev-parse HEAD)"
+REQUIRED_CHECKS="verify windows-installer macos-rime linux-frontends upstream-freshness"
 CI_VERIFIED=0
 API_FAILURES=0
 attempt=1
 while [ "$attempt" -le 30 ]; do
-  if ! CHECK_LINE="$(gh api \
+  if ! CHECK_RUNS="$(gh api \
     -H 'Accept: application/vnd.github+json' \
     "repos/GravityPoet/rime-smart-simplified/commits/$TARGET_SHA/check-runs" \
-    --jq '[.check_runs[] | select(.name == "verify" and .app.slug == "github-actions")][0] | if . == null then "" else [.status, (.conclusion // ""), .details_url] | @tsv end')"
+    --jq '.check_runs[] | select(.app.slug == "github-actions") | [.name, .id, .status, (.conclusion // ""), .details_url] | @tsv')"
   then
     API_FAILURES=$((API_FAILURES + 1))
     if [ "$API_FAILURES" -ge 6 ]; then
@@ -179,33 +233,46 @@ while [ "$attempt" -le 30 ]; do
   fi
 
   API_FAILURES=0
-  if [ -z "$CHECK_LINE" ]; then
-    sleep 5
-    attempt=$((attempt + 1))
-    continue
-  fi
+  PENDING=0
+  for required_check in $REQUIRED_CHECKS; do
+    CHECK_LINE="$(printf '%s\n' "$CHECK_RUNS" | awk -F '\t' -v name="$required_check" '
+      $1 == name && ($2 + 0) >= max_id { line = $0; max_id = ($2 + 0) }
+      END { if (line != "") print line }
+    ')"
+    if [ -z "$CHECK_LINE" ]; then
+      printf 'CI %s: not reported yet\n' "$required_check"
+      PENDING=1
+      continue
+    fi
 
-  CHECK_STATUS="$(printf '%s\n' "$CHECK_LINE" | cut -f1)"
-  CHECK_CONCLUSION="$(printf '%s\n' "$CHECK_LINE" | cut -f2)"
-  CHECK_URL="$(printf '%s\n' "$CHECK_LINE" | cut -f3-)"
-  printf 'CI verify: status=%s conclusion=%s url=%s\n' \
-    "$CHECK_STATUS" "$CHECK_CONCLUSION" "$CHECK_URL"
-  case "$CHECK_STATUS" in
-    completed)
-      if [ "$CHECK_CONCLUSION" != success ]; then
+    CHECK_STATUS="$(printf '%s\n' "$CHECK_LINE" | cut -f3)"
+    CHECK_CONCLUSION="$(printf '%s\n' "$CHECK_LINE" | cut -f4)"
+    CHECK_URL="$(printf '%s\n' "$CHECK_LINE" | cut -f5-)"
+    printf 'CI %s: status=%s conclusion=%s url=%s\n' \
+      "$required_check" "$CHECK_STATUS" "$CHECK_CONCLUSION" "$CHECK_URL"
+    case "$CHECK_STATUS" in
+      completed)
+        if [ "$CHECK_CONCLUSION" != success ]; then
+          printf 'Required check failed: %s (%s)\n' "$required_check" "$CHECK_CONCLUSION" >&2
+          exit 1
+        fi
+        ;;
+      queued|in_progress|waiting|requested|pending)
+        PENDING=1
+        ;;
+      *)
+        printf 'Unexpected GitHub check status for %s: %s\n' \
+          "$required_check" "$CHECK_STATUS" >&2
         exit 1
-      fi
-      CI_VERIFIED=1
-      break
-      ;;
-    queued|in_progress|waiting|requested|pending)
-      sleep 5
-      ;;
-    *)
-      printf 'Unexpected GitHub check status: %s\n' "$CHECK_STATUS" >&2
-      exit 1
-      ;;
-  esac
+        ;;
+    esac
+  done
+
+  if [ "$PENDING" -eq 0 ]; then
+    CI_VERIFIED=1
+    break
+  fi
+  sleep 5
   attempt=$((attempt + 1))
 done
 test "$CI_VERIFIED" -eq 1

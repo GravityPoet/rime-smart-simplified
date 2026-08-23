@@ -148,6 +148,23 @@ Backup: none needed
 
 仓库中的 `custom_phrase.txt`、`smart_chat_phrases.txt` 和三个 `lua/cold_word_drop/*_words.lua` 只是公开模板：首次安装时会复制；目标目录已有这些文件时，安装器会原样保留，不会覆盖私人短语、聊天短语或冷词隐藏、删除、软降频记录。
 
+每次成功安装还会在目标目录写入 `.rime-smart-simplified.install-manifest`。它只记录本工具实际写入的文件及摘要，不记录用户运行时数据库。需要完整移除本配置包时，先退出对应 Rime 前端，再预览并执行精确卸载：
+
+```bash
+cd /path/to/rime-smart-simplified
+RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --dry-run
+RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --apply
+```
+
+Linux 将 `RIME_USER_DIR` 换成 Fcitx5 或 IBus 的实际目录。卸载器只删除摘要仍与安装时一致的项目文件；被你修改过的 YAML、词库、私人短语、学习偏好和已有模型会保留，并逐项报告。默认会在删除前创建时间戳备份；`--no-backup` 只适合你已有独立备份时使用。Windows 等价命令为：
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -RimeUserDir (Join-Path $env:APPDATA "Rime") -DryRun
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -RimeUserDir (Join-Path $env:APPDATA "Rime") -Apply
+```
+
+卸载不会删除空目录，也不会替你删除 Squirrel/小狼毫/Fcitx5/IBus 本体；完成后按前端需要重新部署或切换方案。
+
 ## 高级细节：Linux 目标目录
 
 选择你正在使用的 Rime 前端目录：
@@ -282,6 +299,16 @@ test "$actual" = "$expected"
 ```
 
 `LTS` 是上游 rolling Release；不要把旧 digest 当作永久固定值。每次重新下载时都应读取当时的 GitHub Release API digest。
+
+仓库还提供不触碰真实用户目录的上游锁定和基准检查：
+
+```bash
+cd /path/to/rime-smart-simplified
+./scripts/check_upstream_freshness.sh --local-only --strict
+./scripts/benchmark.sh --iterations 20 --output /tmp/rime-smart-simplified-benchmark.jsonl
+```
+
+基准输出明确标记 `proxy: true` 和 `accuracy_claim: false`；它能证明安装、构建、librime API 候选 smoke 及 Lua 候选流的可重复工程信号，但不冒充真实前端首字延迟或准确率。详见 [`docs/BENCHMARK.md`](./docs/BENCHMARK.md)。
 
 ## 回滚
 

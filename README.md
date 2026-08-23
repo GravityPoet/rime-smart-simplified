@@ -24,6 +24,8 @@
   <a href="./INSTALL.md">完整安装与回滚指南</a>
   ·
   <a href="./PRIVACY.md">隐私边界说明</a>
+  ·
+  <a href="./docs/BENCHMARK.md">可复现基准</a>
 </p>
 
 ---
@@ -81,6 +83,8 @@
    - macOS：双击运行 `Install-on-macOS.command`
    - Windows：双击运行 `Install-on-Windows.cmd`
 3. **重新部署**：在对应 Rime 前端的菜单中点击 **“重新部署 (Deploy)”**，然后切换到“雾凇拼音”。
+
+升级后如需移除本配置包，请使用安装器生成的 ownership manifest 做精确卸载；它会保留你改过的配置、私人短语和学习数据。完整命令见[安装与回滚指南](./INSTALL.md)。
 
 ---
 

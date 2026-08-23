@@ -24,6 +24,8 @@
   <a href="./INSTALL.en.md">Installation Guide</a>
   ·
   <a href="./PRIVACY.en.md">Privacy Boundary</a>
+  ·
+  <a href="./docs/BENCHMARK.md">Reproducible Benchmark</a>
 </p>
 
 ---
@@ -81,6 +83,8 @@ The default first install downloads a roughly 401 MB grammar model and 7 MB pred
    - macOS: Double-click `Install-on-macOS.command`
    - Windows: Double-click `Install-on-Windows.cmd`
 3. **Deploy**: Click **Deploy (重新部署)** from the corresponding Rime frontend menu, then select Rime Ice.
+
+To remove this configuration pack later, use the ownership-manifest uninstaller described in the [installation guide](./INSTALL.en.md). It preserves edited configuration, private phrases, and learning data.
 
 ---
 

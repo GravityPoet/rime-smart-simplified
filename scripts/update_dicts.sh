@@ -16,6 +16,7 @@ UPSTREAM_BRANCH="wanxiang"
 UPSTREAM_API_BASE="https://api.github.com/repos/$UPSTREAM_REPO/contents/dicts"
 UPSTREAM_RAW_BASE="https://raw.githubusercontent.com/$UPSTREAM_REPO"
 VERSION_FILE="$LOCAL_DIR/.upstream-commit"
+LOCK_FILE="$ROOT/UPSTREAM_ASSETS.lock.json"
 # 与 rime_ice.dict.yaml import_tables 保持一致的万象词典清单
 DICTS="zi jichu lianxiang cuoyin duoyin shici diming"
 # 新文件行数低于本地行数的该比例（百分数）时拒绝替换，防上游截断或重构
@@ -40,13 +41,18 @@ done
 command -v git >/dev/null 2>&1 || { printf 'git is required for blob-sha comparison.\n' >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { printf 'curl is required.\n' >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { printf 'python3 is required for GitHub API parsing.\n' >&2; exit 1; }
+if [ "$APPLY" -eq 1 ] && { [ ! -f "$LOCK_FILE" ] || [ -L "$LOCK_FILE" ]; }; then
+  printf 'Refusing --apply without a regular upstream lock file: %s\n' "$LOCK_FILE" >&2
+  exit 1
+fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 printf 'Resolving upstream commit (%s@%s) ...\n' "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
-HEAD_COMMIT="$(curl -fsSL "https://api.github.com/repos/$UPSTREAM_REPO/commits/$UPSTREAM_BRANCH" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+curl -fsSL "https://api.github.com/repos/$UPSTREAM_REPO/commits/$UPSTREAM_BRANCH" > "$TMP_DIR/commit.json"
+HEAD_COMMIT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$TMP_DIR/commit.json")"
+HEAD_COMMIT_DATE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"]["committer"]["date"])' "$TMP_DIR/commit.json")"
 UPSTREAM_API="$UPSTREAM_API_BASE?ref=$HEAD_COMMIT"
 UPSTREAM_RAW="$UPSTREAM_RAW_BASE/$HEAD_COMMIT/dicts"
 printf 'Fetching upstream file list pinned to %s ...\n' "$HEAD_COMMIT"
@@ -155,7 +161,52 @@ if [ -n "$FAILED" ]; then
 fi
 if [ -n "$APPLIED" ]; then
   printf '%s\n' "$HEAD_COMMIT" > "$VERSION_FILE"
+  python3 - "$LOCK_FILE" "$HEAD_COMMIT" "$HEAD_COMMIT_DATE" "$LOCAL_DIR" $DICTS <<'PY'
+import json
+import os
+import sys
+import tempfile
+import hashlib
+
+lock_path, commit, commit_date, local_dir = sys.argv[1:5]
+names = sys.argv[5:]
+with open(lock_path, encoding="utf-8") as fh:
+    lock = json.load(fh)
+dicts = lock.get("dictionaries")
+if not isinstance(dicts, dict) or dicts.get("repo") != "amzxyz/rime-wanxiang":
+    raise SystemExit("upstream lock dictionary source is invalid")
+if not names:
+    raise SystemExit("no dictionaries were supplied for lock update")
+blob_sha = {}
+for name in names:
+    path = os.path.join(local_dir, name + ".dict.yaml")
+    with open(path, "rb") as fh:
+        payload = fh.read()
+    blob_sha[name + ".dict.yaml"] = hashlib.sha1(
+        ("blob %d\0" % len(payload)).encode("ascii") + payload
+    ).hexdigest()
+dicts["commit"] = commit
+dicts["commit_date"] = commit_date
+dicts["files"] = [name + ".dict.yaml" for name in names]
+dicts["blob_sha"] = blob_sha
+directory = os.path.dirname(lock_path) or "."
+fd, temporary = tempfile.mkstemp(prefix=".UPSTREAM_ASSETS.lock.", dir=directory, text=True)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(lock, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(temporary, lock_path)
+except Exception:
+    try:
+        os.unlink(temporary)
+    except OSError:
+        pass
+    raise
+PY
   printf '\nUpdated:%s\n' "$APPLIED"
+  printf 'Upstream lock updated: %s\n' "$LOCK_FILE"
   printf 'Upstream commit recorded in %s\n' "$VERSION_FILE"
   printf 'Rollback: copy files back from %s\n' "$BACKUP_DIR"
   printf 'Next: cd %s && ./scripts/install.sh && redeploy the input method.\n' "$ROOT"

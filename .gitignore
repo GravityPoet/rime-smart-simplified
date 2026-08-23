@@ -24,3 +24,9 @@ lua/cold_word_drop/runLog.txt
 
 # Local-only private phrases. Keep custom_phrase.txt as a public template.
 custom_phrase.local.txt
+
+# Installer ownership metadata (generated in a user directory)
+.rime-smart-simplified.install-manifest
+
+# Local benchmark output
+benchmark-results.jsonl

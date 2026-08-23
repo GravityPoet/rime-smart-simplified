@@ -11,6 +11,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Windows PowerShell 5.1 may still default to TLS 1.0/1.1. GitHub requires
+# TLS 1.2; setting this is harmless under PowerShell 7 (which uses its own
+# HTTP stack) and keeps the legacy entry point usable on supported Windows.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch {
+    # PowerShell 7 can ignore ServicePointManager when using HttpClient.
+}
+
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $GramFile = "wanxiang-lts-zh-hans.gram"
 $GramUrl = "https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram"
@@ -21,6 +30,7 @@ $GramApiUrl = "https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS"
 $PredictFile = "predict.db"
 $PredictUrl = "https://github.com/rime/librime-predict/releases/download/data-1.0/predict.db"
 $PredictSha256 = "2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be"
+$InstallManifestName = ".rime-smart-simplified.install-manifest"
 $PrivateStateFiles = @(
     "lua/cold_word_drop/drop_words.lua",
     "lua/cold_word_drop/hide_words.lua",
@@ -33,7 +43,20 @@ if ([string]::IsNullOrWhiteSpace($RimeUserDir)) {
     }
     $RimeUserDir = Join-Path $env:APPDATA "Rime"
 }
-$Target = [System.IO.Path]::GetFullPath($RimeUserDir)
+
+function Normalize-FullPath {
+    param([string]$Path)
+
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetPathRoot($full)
+    if ($full.Length -gt $root.Length) {
+        return $full.TrimEnd([char[]]@('\', '/'))
+    }
+    return $full
+}
+
+$Target = Normalize-FullPath -Path $RimeUserDir
+$MarkerPath = Join-Path $Target $InstallManifestName
 
 foreach ($required in @("rime_ice.schema.yaml", "rime_ice.dict.yaml", "rime.lua")) {
     if (-not (Test-Path -LiteralPath (Join-Path $Root $required) -PathType Leaf)) {
@@ -45,6 +68,36 @@ function Get-RelativePath {
     param([string]$Path)
 
     return $Path.Substring($Root.Length + 1).Replace("\", "/")
+}
+
+function Get-ExistingItem {
+    param([string]$Path)
+
+    try {
+        return Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    } catch {
+        if ($_.CategoryInfo.Category -eq "ObjectNotFound") {
+            return $null
+        }
+        throw
+    }
+}
+
+function Write-Utf8NoBom {
+    param(
+        [string]$Path,
+        [string[]]$Lines
+    )
+
+    # Set-Content -Encoding UTF8 emits a BOM on Windows PowerShell 5.1.
+    # Keep the ownership manifest readable by the POSIX uninstall path too.
+    $encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+    $content = if ($null -ne $Lines -and $Lines.Count -gt 0) {
+        ($Lines -join "`n") + "`n"
+    } else {
+        ""
+    }
+    [System.IO.File]::WriteAllText($Path, $content, $encoding)
 }
 
 function New-UniqueBackupDirectory {
@@ -76,15 +129,15 @@ function Assert-NoReparsePointBelowTarget {
         [string]$TargetRoot
     )
 
-    $targetFull = [System.IO.Path]::GetFullPath($TargetRoot)
-    $current = [System.IO.Path]::GetFullPath($DestinationPath)
+    $targetFull = Normalize-FullPath -Path $TargetRoot
+    $current = Normalize-FullPath -Path $DestinationPath
     while (-not [string]::Equals(
         $current,
         $targetFull,
         [System.StringComparison]::OrdinalIgnoreCase
     )) {
-        if (Test-Path -LiteralPath $current) {
-            $item = Get-Item -LiteralPath $current -Force
+        $item = Get-ExistingItem -Path $current
+        if ($null -ne $item) {
             if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
                 throw "Refusing to write through a symlink or junction below the Rime target: $current"
             }
@@ -94,8 +147,35 @@ function Assert-NoReparsePointBelowTarget {
         if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) {
             throw "Install destination is not contained by the Rime target: $DestinationPath"
         }
-        $current = [System.IO.Path]::GetFullPath($parent)
+        $current = Normalize-FullPath -Path $parent
     }
+}
+
+function Get-PackageVersion {
+    if (-not [string]::IsNullOrWhiteSpace($env:RIME_PACKAGE_VERSION)) {
+        return $env:RIME_PACKAGE_VERSION
+    }
+    try {
+        $value = (& git -C $Root describe --tags --always 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    } catch {
+        # Release archives do not include .git; metadata remains explicit below.
+    }
+    return "unknown"
+}
+
+function Get-SourceRevision {
+    try {
+        $value = (& git -C $Root rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    } catch {
+        # Release archives do not include .git.
+    }
+    return "unknown"
 }
 
 $Manifest = @()
@@ -201,12 +281,10 @@ $RollbackDir = $null
 $KeepRollbackDir = $false
 
 try {
-    if ($NeedGramDownload -or $NeedPredictDownload) {
-        $StagingDir = Join-Path ([System.IO.Path]::GetTempPath()) (
-            "rime-smart-simplified-stage-" + [System.Guid]::NewGuid().ToString("N")
-        )
-        New-Item -ItemType Directory -Path $StagingDir -ErrorAction Stop | Out-Null
-    }
+    $StagingDir = Join-Path ([System.IO.Path]::GetTempPath()) (
+        "rime-smart-simplified-stage-" + [System.Guid]::NewGuid().ToString("N")
+    )
+    New-Item -ItemType Directory -Path $StagingDir -ErrorAction Stop | Out-Null
 
     if ($NeedGramDownload) {
         $StagedGram = Join-Path $StagingDir $GramFile
@@ -224,7 +302,7 @@ try {
         }
 
         Write-Output "Downloading $GramFile ..."
-        Invoke-WebRequest -Uri $GramUrl -OutFile $StagedGram
+            Invoke-WebRequest -Uri $GramUrl -OutFile $StagedGram -UseBasicParsing
         if ($VerifyGram) {
             $ActualDigest = (Get-FileHash -LiteralPath $StagedGram -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($ActualDigest -ne $ExpectedDigest) {
@@ -237,7 +315,7 @@ try {
     if ($NeedPredictDownload) {
         $StagedPredict = Join-Path $StagingDir $PredictFile
         Write-Output "Downloading $PredictFile ..."
-        Invoke-WebRequest -Uri $PredictUrl -OutFile $StagedPredict
+        Invoke-WebRequest -Uri $PredictUrl -OutFile $StagedPredict -UseBasicParsing
         $ActualPredictSha = (Get-FileHash -LiteralPath $StagedPredict -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($ActualPredictSha -ne $PredictSha256) {
             throw "SHA-256 mismatch for $PredictFile. Expected $PredictSha256; actual $ActualPredictSha"
@@ -252,6 +330,7 @@ try {
             SourcePath = Join-Path $Root $relativePath
             DestinationPath = Join-Path $Target $relativePath
             OriginallyExisted = $false
+            Ownership = "managed"
         }
     }
 
@@ -261,6 +340,7 @@ try {
             SourcePath = $SourceGram
             DestinationPath = $TargetGram
             OriginallyExisted = $false
+            Ownership = "asset-created"
         }
     } elseif ($NeedGramDownload) {
         $WriteEntries += [PSCustomObject]@{
@@ -268,6 +348,7 @@ try {
             SourcePath = $StagedGram
             DestinationPath = $TargetGram
             OriginallyExisted = $false
+            Ownership = "asset-created"
         }
     }
 
@@ -277,6 +358,7 @@ try {
             SourcePath = $SourcePredict
             DestinationPath = $TargetPredict
             OriginallyExisted = $false
+            Ownership = "asset-created"
         }
     } elseif ($NeedPredictDownload) {
         $WriteEntries += [PSCustomObject]@{
@@ -284,6 +366,7 @@ try {
             SourcePath = $StagedPredict
             DestinationPath = $TargetPredict
             OriginallyExisted = $false
+            Ownership = "asset-created"
         }
     }
 
@@ -292,7 +375,61 @@ try {
     }
 
     foreach ($entry in $WriteEntries) {
-        $entry.OriginallyExisted = Test-Path -LiteralPath $entry.DestinationPath -PathType Leaf
+        $existingItem = Get-ExistingItem -Path $entry.DestinationPath
+        if ($null -ne $existingItem) {
+            if (($existingItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Refusing to overwrite a symlink or junction below the Rime target: $($entry.DestinationPath)"
+            }
+            if ($existingItem.PSIsContainer) {
+                throw "Refusing to overwrite a non-regular install destination: $($entry.DestinationPath)"
+            }
+            $entry.OriginallyExisted = $true
+        } else {
+            $entry.OriginallyExisted = $false
+        }
+    }
+
+    Assert-NoReparsePointBelowTarget -DestinationPath $MarkerPath -TargetRoot $Target
+    $markerItem = Get-ExistingItem -Path $MarkerPath
+    if ($null -ne $markerItem -and ($markerItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to overwrite a symlink or junction below the Rime target: $MarkerPath"
+    }
+    if ($null -ne $markerItem -and $markerItem.PSIsContainer) {
+        throw "Refusing to overwrite a non-regular install manifest: $MarkerPath"
+    }
+
+    $SourceRecordLines = @()
+    $ManifestEntryLines = @()
+    foreach ($entry in $WriteEntries) {
+        if ($entry.Ownership -eq "asset-created" -and $entry.OriginallyExisted) {
+            continue
+        }
+        $sourceDigest = (Get-FileHash -LiteralPath $entry.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $SourceRecordLines += "$($entry.RelativePath)`t$sourceDigest`t$($entry.Ownership)"
+        $ManifestEntryLines += "file`t$($entry.RelativePath)`t$sourceDigest`t$sourceDigest`t$($entry.Ownership)"
+    }
+    $SourceRecordsPath = Join-Path $StagingDir "source-records"
+    Write-Utf8NoBom -Path $SourceRecordsPath -Lines $SourceRecordLines
+    $SourceTreeHash = (Get-FileHash -LiteralPath $SourceRecordsPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $PackageVersion = Get-PackageVersion
+    $SourceRevision = Get-SourceRevision
+    $StagedManifest = Join-Path $StagingDir $InstallManifestName
+    $ManifestLines = @(
+        "# rime-smart-simplified install manifest v2"
+        "# Generated by scripts/install.ps1; do not edit."
+        "# package_version=$PackageVersion"
+        "# source_revision=$SourceRevision"
+        "# source_hash=sha256:$SourceTreeHash"
+        $ManifestEntryLines
+    )
+    Write-Utf8NoBom -Path $StagedManifest -Lines $ManifestLines
+    $markerOriginallyExisted = $null -ne $markerItem
+    $WriteEntries += [PSCustomObject]@{
+        RelativePath = $InstallManifestName
+        SourcePath = $StagedManifest
+        DestinationPath = $MarkerPath
+        OriginallyExisted = $markerOriginallyExisted
+        Ownership = "managed"
     }
     $ExistingEntries = @($WriteEntries | Where-Object { $_.OriginallyExisted })
 
@@ -329,7 +466,7 @@ try {
     }
 
     $TouchedEntries = @()
-    $TargetOriginallyExisted = Test-Path -LiteralPath $Target
+    $TargetOriginallyExisted = $null -ne (Get-ExistingItem -Path $Target)
     try {
         New-Item -ItemType Directory -Force -Path $Target | Out-Null
 
