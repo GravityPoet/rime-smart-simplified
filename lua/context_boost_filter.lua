@@ -28,14 +28,13 @@ local LOG_2 = math.log(2)
 local data_path
 local journal_path
 local map = {}
-local history = {}
-local session_touched = {}
 local dirty_keys = {}
 local pending_saves = 0
 local last_save_time = 0
-local last_commit_time = 0
 local journal_rows = 0
 local has_malformed_records = false
+local active_instances = 0
+local active_user_dir
 
 local function split_tab(line)
   local t = {}
@@ -385,12 +384,9 @@ end
 
 local function load_map()
   map = {}
-  history = {}
-  session_touched = {}
   dirty_keys = {}
   pending_saves = 0
   last_save_time = os.time()
-  last_commit_time = 0
 
   recover_interrupted_replace(data_path)
 
@@ -401,12 +397,12 @@ local function load_map()
   maybe_compact()
 end
 
-local function mark_session_touch(key, text)
-  if not session_touched[key] then session_touched[key] = {} end
-  session_touched[key][text] = true
+local function mark_session_touch(touched, key, text)
+  if not touched[key] then touched[key] = {} end
+  touched[key][text] = true
 end
 
-local function record_pair(prev, text, now)
+local function record_pair(prev, text, now, touched)
   local arr = resolve_items(map, prev)
   if not arr then
     arr = {}
@@ -418,14 +414,14 @@ local function record_pair(prev, text, now)
       arr[i].last = now
       sort_items(arr)
       dirty_keys[prev] = true
-      mark_session_touch(prev, text)
+      mark_session_touch(touched, prev, text)
       return
     end
   end
   arr[#arr + 1] = { text = text, count = 1, last = now }
   sort_items(arr)
   dirty_keys[prev] = true
-  mark_session_touch(prev, text)
+  mark_session_touch(touched, prev, text)
 end
 
 local function make_context_key(source_history, count)
@@ -438,7 +434,7 @@ local function make_context_key(source_history, count)
   return "@" .. count .. ":" .. table.concat(parts, CONTEXT_SEP)
 end
 
-local function push_history(text)
+local function push_history(history, text)
   history[#history + 1] = text
   while #history > HISTORY_LIMIT do
     table.remove(history, 1)
@@ -476,30 +472,45 @@ end
 
 function M.init(env)
   local user_dir = rime_api.get_user_data_dir()
-  data_path = user_dir .. "/" .. DATA_FILE
-  journal_path = user_dir .. "/" .. JOURNAL_FILE
-  load_map()
+  if active_instances == 0 then
+    data_path = user_dir .. "/" .. DATA_FILE
+    journal_path = user_dir .. "/" .. JOURNAL_FILE
+    active_user_dir = user_dir
+    load_map()
+  elseif active_user_dir ~= user_dir then
+    error("context_boost_filter cannot serve multiple Rime user directories in one Lua runtime")
+  end
+
+  env._context_history = {}
+  env._context_session_touched = {}
+  env._context_last_commit_time = 0
+  env._context_active = true
+  active_instances = active_instances + 1
 
   env.commit_connection = env.engine.context.commit_notifier:connect(function(ctx)
     local text = learnable(ctx:get_commit_text())
     if not text then return end
 
     local now = os.time()
-    if last_commit_time > 0 and (now - last_commit_time) > SESSION_GAP_SECONDS then
+    local history = env._context_history
+    local session_touched = env._context_session_touched
+    if env._context_last_commit_time > 0 and (now - env._context_last_commit_time) > SESSION_GAP_SECONDS then
       history = {}
       session_touched = {}
+      env._context_history = history
+      env._context_session_touched = session_touched
     end
-    last_commit_time = now
+    env._context_last_commit_time = now
 
     local changed = false
     if #history >= 1 then
-      record_pair(history[#history], text, now)
+      record_pair(history[#history], text, now, session_touched)
       changed = true
     end
     for count = 2, HISTORY_LIMIT do
       local key = make_context_key(history, count)
       if key then
-        record_pair(key, text, now)
+        record_pair(key, text, now, session_touched)
         changed = true
       end
     end
@@ -508,7 +519,7 @@ function M.init(env)
       pending_saves = pending_saves + 1
       maybe_save(false)
     end
-    push_history(text)
+    push_history(history, text)
   end)
 end
 
@@ -519,6 +530,11 @@ function M.fini(env)
     env.commit_connection = nil
   end
   maybe_save(true)
+  if env and env._context_active then
+    env._context_active = false
+    active_instances = math.max(0, active_instances - 1)
+    if active_instances == 0 then active_user_dir = nil end
+  end
 end
 
 local function rank_boosted(target, source_history, touched_map, now)
@@ -581,8 +597,8 @@ local function rank_boosted(target, source_history, touched_map, now)
   return boosted
 end
 
-local function collect_boosted()
-  return rank_boosted(map, history, session_touched, os.time())
+local function collect_boosted(source_history, touched)
+  return rank_boosted(map, source_history, touched, os.time())
 end
 
 function M.func(input, env)
@@ -592,7 +608,7 @@ function M.func(input, env)
     return
   end
 
-  local boosted = collect_boosted()
+  local boosted = collect_boosted(env._context_history or {}, env._context_session_touched or {})
   if #boosted == 0 then
     pass_through(input)
     return

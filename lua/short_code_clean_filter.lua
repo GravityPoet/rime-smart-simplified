@@ -2,6 +2,7 @@
 -- 只调整顺序，不删除候选；放在个性化学习之后，作为最终首屏清理。
 
 local M = {}
+local REORDER_CAP = 100
 
 local DEMOTE_TEXTS = {
   ["嗎"] = true,
@@ -132,7 +133,11 @@ function M.func(input, env)
   local emoji = {}
   local english = {}
 
-  for cand in input:iter() do
+  -- 只整理首屏附近的候选；候选流是惰性的，若先读完整条流再 yield，
+  -- 每个 1～4 字母短码都会被迫计算全部长尾候选，直接增加按键延迟。
+  local iter = input:iter()
+  local scanned = 0
+  for cand in iter do
     local text = cand.text or ""
     if is_user_defined_ascii(cand, text) then
       push(protected, cand)
@@ -145,6 +150,8 @@ function M.func(input, env)
     else
       push(normal, cand)
     end
+    scanned = scanned + 1
+    if scanned >= REORDER_CAP then break end
   end
 
   yield_list(protected)
@@ -152,6 +159,9 @@ function M.func(input, env)
   yield_list(demoted)
   yield_list(emoji)
   yield_list(english)
+
+  -- 上限之后保持原始惰性顺序，深翻页仍能取到完整候选。
+  for cand in iter do yield(cand) end
 end
 
 return M

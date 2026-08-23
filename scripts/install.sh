@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${RIME_USER_DIR:-$HOME/Library/Rime}"
+TARGET=""
 DRY_RUN=0
 BACKUP=1
 DOWNLOAD_GRAM=1
@@ -16,6 +16,114 @@ GRAM_API_URL="https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS"
 PREDICT_FILE="predict.db"
 PREDICT_URL="https://github.com/rime/librime-predict/releases/download/data-1.0/predict.db"
 PREDICT_SHA256="2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be"
+WORK_DIR=""
+MANIFEST=""
+INSTALL_PATHS=""
+NEW_FILES=""
+EXISTING_FILES=""
+BACKUP_DIR=""
+WRITE_STARTED=0
+TARGET_EXISTED=0
+
+cleanup() {
+  if [ -n "$WORK_DIR" ]; then
+    rm -rf "$WORK_DIR"
+  fi
+}
+
+rollback_on_error() {
+  status=$?
+  trap - ERR
+  set +e
+
+  if [ "$TARGET_EXISTED" -eq 0 ] && [ -e "$TARGET" ]; then
+    rm -rf "$TARGET"
+    printf 'Installation failed; removed the incomplete new target: %s\n' "$TARGET" >&2
+  elif [ "$WRITE_STARTED" -eq 1 ]; then
+    if [ "$TARGET_EXISTED" -eq 0 ]; then
+      rm -rf "$TARGET"
+      printf 'Installation failed; removed the incomplete new target: %s\n' "$TARGET" >&2
+    else
+      while IFS= read -r rel; do
+        [ -n "$rel" ] && rm -f "$TARGET/$rel"
+      done < "$NEW_FILES"
+
+      if [ "$BACKUP" -eq 1 ] && [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
+        while IFS= read -r rel; do
+          [ -n "$rel" ] || continue
+          if [ -e "$BACKUP_DIR/$rel" ]; then
+            mkdir -p "$TARGET/$(dirname "$rel")"
+            cp -a "$BACKUP_DIR/$rel" "$TARGET/$rel"
+          fi
+        done < "$EXISTING_FILES"
+        printf 'Installation failed; restored the previous files from: %s\n' "$BACKUP_DIR" >&2
+      elif [ -s "$EXISTING_FILES" ]; then
+        printf 'Installation failed after --no-backup; overwritten files could not be restored automatically.\n' >&2
+      else
+        printf 'Installation failed; removed files created by this attempt.\n' >&2
+      fi
+    fi
+  else
+    printf 'Installation failed before existing Rime files were changed.\n' >&2
+  fi
+
+  exit "$status"
+}
+
+resolve_target() {
+  if [ -n "${RIME_USER_DIR:-}" ]; then
+    TARGET="$RIME_USER_DIR"
+    return
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      TARGET="$HOME/Library/Rime"
+      ;;
+    Linux)
+      printf '%s\n' \
+        'Linux requires an explicit RIME_USER_DIR because Fcitx5 and IBus use different directories.' \
+        'Fcitx5: RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh' \
+        'IBus:   RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh' >&2
+      exit 2
+      ;;
+    *)
+      printf 'Unsupported platform. Set RIME_USER_DIR explicitly: %s\n' "$(uname -s)" >&2
+      exit 2
+      ;;
+  esac
+}
+
+next_backup_dir() {
+  base="${TARGET}.backup.$(date +%Y%m%d-%H%M%S)"
+  candidate="$base"
+  suffix=1
+  while [ -e "$candidate" ]; do
+    candidate="${base}.${suffix}"
+    suffix=$((suffix + 1))
+  done
+  printf '%s\n' "$candidate"
+}
+
+find_symlink_component() {
+  rel="$1"
+  current="$TARGET"
+  remaining="$rel"
+  while [ -n "$remaining" ]; do
+    case "$remaining" in
+      */*) component="${remaining%%/*}"; remaining="${remaining#*/}" ;;
+      *) component="$remaining"; remaining="" ;;
+    esac
+    current="$current/$component"
+    if [ -L "$current" ]; then
+      printf '%s\n' "$current"
+      return 0
+    fi
+  done
+  return 1
+}
+
+trap cleanup EXIT
 
 usage() {
   printf 'Usage: %s [--dry-run] [--no-backup] [--no-download-gram] [--skip-verify-gram] [--no-download-predict]\n' "$0"
@@ -95,14 +203,19 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+resolve_target
+
 if [ ! -f "$ROOT/rime_ice.schema.yaml" ] || [ ! -f "$ROOT/rime.lua" ]; then
   printf 'Install source is incomplete: %s\n' "$ROOT" >&2
   exit 1
 fi
 
 cd "$ROOT"
-MANIFEST="$(mktemp)"
-trap 'rm -f "$MANIFEST"' EXIT
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rime-smart-simplified.XXXXXX")"
+MANIFEST="$WORK_DIR/manifest"
+INSTALL_PATHS="$WORK_DIR/install-paths"
+NEW_FILES="$WORK_DIR/new-files"
+EXISTING_FILES="$WORK_DIR/existing-files"
 
 {
   find . -maxdepth 1 -type f \
@@ -135,6 +248,32 @@ trap 'rm -f "$MANIFEST"' EXIT
 } \
   | sed 's#^\./##' \
   | sort > "$MANIFEST"
+
+cp "$MANIFEST" "$INSTALL_PATHS"
+if [ -f "$ROOT/$GRAM_FILE" ] \
+  || { [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; }
+then
+  printf '%s\n' "$GRAM_FILE" >> "$INSTALL_PATHS"
+fi
+if [ -f "$ROOT/$PREDICT_FILE" ] \
+  || { [ ! -f "$TARGET/$PREDICT_FILE" ] && [ "$DOWNLOAD_PREDICT" -eq 1 ]; }
+then
+  printf '%s\n' "$PREDICT_FILE" >> "$INSTALL_PATHS"
+fi
+sort -u "$INSTALL_PATHS" > "$WORK_DIR/install-paths.sorted"
+mv "$WORK_DIR/install-paths.sorted" "$INSTALL_PATHS"
+
+TARGET_SYMLINKS="$WORK_DIR/target-symlinks"
+while IFS= read -r rel; do
+  if symlink_path="$(find_symlink_component "$rel")"; then
+    printf '%s -> %s\n' "$rel" "$symlink_path" >> "$TARGET_SYMLINKS"
+  fi
+done < "$INSTALL_PATHS"
+if [ -s "$TARGET_SYMLINKS" ]; then
+  printf 'Refusing to write through symlinks below the Rime target. Merge or replace these links first:\n' >&2
+  sed 's/^/  /' "$TARGET_SYMLINKS" >&2
+  exit 1
+fi
 
 printf 'Target: %s\n' "$TARGET"
 printf 'Backup decision: overwrite-capable local config install; backup is enabled by default.\n'
@@ -180,41 +319,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-mkdir -p "$TARGET"
-
-if [ "$BACKUP" -eq 1 ]; then
-  TS="$(date +%Y%m%d-%H%M%S)"
-  BACKUP_DIR="${TARGET}.backup.${TS}"
-  BACKED_UP=0
-  while IFS= read -r rel; do
-    if [ -e "$TARGET/$rel" ]; then
-      if [ "$BACKED_UP" -eq 0 ]; then
-        mkdir -p "$BACKUP_DIR"
-        BACKED_UP=1
-      fi
-      mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
-      cp -a "$TARGET/$rel" "$BACKUP_DIR/$rel"
-    fi
-  done < "$MANIFEST"
-  if [ "$BACKED_UP" -eq 1 ]; then
-    printf 'Backup: %s\n' "$BACKUP_DIR"
-  else
-    printf 'Backup: none needed\n'
-  fi
-else
-  printf 'Backup: skipped by --no-backup\n'
-fi
-
-while IFS= read -r rel; do
-  mkdir -p "$TARGET/$(dirname "$rel")"
-  cp -a "$ROOT/$rel" "$TARGET/$rel"
-done < "$MANIFEST"
-
+GRAM_SOURCE=""
 if [ -f "$ROOT/$GRAM_FILE" ]; then
-  cp -a "$ROOT/$GRAM_FILE" "$TARGET/$GRAM_FILE"
+  GRAM_SOURCE="$ROOT/$GRAM_FILE"
 elif [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
-  tmp_file="$TARGET/$GRAM_FILE.tmp"
-  rm -f "$tmp_file"
+  GRAM_SOURCE="$WORK_DIR/$GRAM_FILE"
   printf 'Downloading %s ...\n' "$GRAM_FILE"
   expected_digest=""
   if [ "$VERIFY_GRAM" -eq 1 ]; then
@@ -225,33 +334,79 @@ elif [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
       exit 1
     fi
   fi
-  curl -L --fail --output "$tmp_file" "$GRAM_URL"
+  curl -L --fail --output "$GRAM_SOURCE" "$GRAM_URL"
   if [ "$VERIFY_GRAM" -eq 1 ]; then
-    verify_gram_digest "$tmp_file" "$expected_digest"
+    verify_gram_digest "$GRAM_SOURCE" "$expected_digest"
   fi
-  mv "$tmp_file" "$TARGET/$GRAM_FILE"
 fi
 
+PREDICT_SOURCE=""
 if [ -f "$ROOT/$PREDICT_FILE" ]; then
-  cp -a "$ROOT/$PREDICT_FILE" "$TARGET/$PREDICT_FILE"
+  PREDICT_SOURCE="$ROOT/$PREDICT_FILE"
 elif [ ! -f "$TARGET/$PREDICT_FILE" ] && [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
-  tmp_file="$TARGET/$PREDICT_FILE.tmp"
-  rm -f "$tmp_file"
+  PREDICT_SOURCE="$WORK_DIR/$PREDICT_FILE"
   printf 'Downloading %s ...\n' "$PREDICT_FILE"
-  if ! curl -L --fail --output "$tmp_file" "$PREDICT_URL"; then
-    rm -f "$tmp_file"
+  if ! curl -L --fail --output "$PREDICT_SOURCE" "$PREDICT_URL"; then
     exit 1
   fi
-  actual_predict_sha="$(sha256_file "$tmp_file")"
+  actual_predict_sha="$(sha256_file "$PREDICT_SOURCE")"
   if [ "$actual_predict_sha" != "$PREDICT_SHA256" ]; then
     printf 'SHA-256 mismatch for %s\n' "$PREDICT_FILE" >&2
     printf 'Expected: %s\n' "$PREDICT_SHA256" >&2
     printf 'Actual:   %s\n' "$actual_predict_sha" >&2
-    rm -f "$tmp_file"
     exit 1
   fi
   printf 'Verified %s SHA-256: %s\n' "$PREDICT_FILE" "$actual_predict_sha"
-  mv "$tmp_file" "$TARGET/$PREDICT_FILE"
+fi
+
+: > "$NEW_FILES"
+: > "$EXISTING_FILES"
+if [ -e "$TARGET" ]; then
+  TARGET_EXISTED=1
+fi
+while IFS= read -r rel; do
+  if [ -e "$TARGET/$rel" ]; then
+    printf '%s\n' "$rel" >> "$EXISTING_FILES"
+  else
+    printf '%s\n' "$rel" >> "$NEW_FILES"
+  fi
+done < "$INSTALL_PATHS"
+
+trap rollback_on_error ERR
+mkdir -p "$TARGET"
+
+if [ "$BACKUP" -eq 1 ]; then
+  BACKUP_DIR="$(next_backup_dir)"
+  BACKED_UP=0
+  while IFS= read -r rel; do
+    if [ "$BACKED_UP" -eq 0 ]; then
+      mkdir -p "$BACKUP_DIR"
+      BACKED_UP=1
+    fi
+    mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
+    cp -a "$TARGET/$rel" "$BACKUP_DIR/$rel"
+  done < "$EXISTING_FILES"
+  if [ "$BACKED_UP" -eq 1 ]; then
+    printf 'Backup: %s\n' "$BACKUP_DIR"
+  else
+    printf 'Backup: none needed\n'
+  fi
+else
+  printf 'Backup: skipped by --no-backup\n'
+fi
+
+WRITE_STARTED=1
+while IFS= read -r rel; do
+  mkdir -p "$TARGET/$(dirname "$rel")"
+  cp -a "$ROOT/$rel" "$TARGET/$rel"
+done < "$MANIFEST"
+
+if [ -n "$GRAM_SOURCE" ]; then
+  cp -a "$GRAM_SOURCE" "$TARGET/$GRAM_FILE"
+fi
+
+if [ -n "$PREDICT_SOURCE" ]; then
+  cp -a "$PREDICT_SOURCE" "$TARGET/$PREDICT_FILE"
 fi
 
 test -f "$TARGET/rime_ice.schema.yaml"
@@ -269,4 +424,6 @@ if [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
   test -f "$TARGET/$PREDICT_FILE"
 fi
 
+WRITE_STARTED=0
+trap - ERR
 printf 'Installed. Redeploy Rime/Squirrel/Weasel from the input-method menu.\n'

@@ -5,28 +5,31 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LUAC_BIN="${LUAC_BIN:-}"
 LUA_BIN="${LUA_BIN:-}"
 TMP_MANIFEST_DIR=""
+TMP_MANIFEST_ROOT=""
+TMP_MANIFEST_SOURCE=""
 TMP_RIME_DIR=""
 TMP_BEHAVIOR_DIR=""
 TMP_WINDOWS_DIR=""
+TMP_TRANSACTION_ROOT=""
 
 cleanup() {
-  rm -f \
-    "$ROOT/user.yaml" \
-    "$ROOT/installation.yaml" \
-    "$ROOT/lua/cold_word_drop/runLog.txt" \
-    "$ROOT/.codegraph/ci-local.txt" \
-    "$ROOT/docs/ci-local.txt"
   if [ -n "$TMP_RIME_DIR" ]; then
     rm -rf "$TMP_RIME_DIR"
   fi
-  if [ -n "$TMP_MANIFEST_DIR" ]; then
-    rm -rf "$TMP_MANIFEST_DIR"
+  if [ -n "$TMP_MANIFEST_ROOT" ]; then
+    rm -rf "$TMP_MANIFEST_ROOT"
+  fi
+  if [ -n "$TMP_MANIFEST_SOURCE" ]; then
+    rm -rf "$TMP_MANIFEST_SOURCE"
   fi
   if [ -n "$TMP_BEHAVIOR_DIR" ]; then
     rm -rf "$TMP_BEHAVIOR_DIR"
   fi
   if [ -n "$TMP_WINDOWS_DIR" ]; then
     rm -rf "$TMP_WINDOWS_DIR"
+  fi
+  if [ -n "$TMP_TRANSACTION_ROOT" ]; then
+    rm -rf "$TMP_TRANSACTION_ROOT"
   fi
 }
 trap cleanup EXIT
@@ -108,6 +111,7 @@ cd "$ROOT"
 
 printf 'Checking shell syntax...\n'
 bash -n "$ROOT/scripts/install.sh"
+bash -n "$ROOT/scripts/update_dicts.sh"
 bash -n "$ROOT/scripts/verify.sh"
 bash -n "$ROOT/Install-on-macOS.command"
 grep 'scripts\\install.ps1' "$ROOT/Install-on-Windows.cmd" >/dev/null
@@ -135,16 +139,42 @@ TMP_BEHAVIOR_DIR="$(mktemp -d)"
 TZ=Asia/Tokyo "$LUA_RESOLVED" "$ROOT/tests/lua_behavior_test.lua" "$ROOT" "$TMP_BEHAVIOR_DIR"
 
 printf 'Checking install manifest allow-list...\n'
-mkdir -p "$ROOT/.codegraph" "$ROOT/docs"
+TMP_MANIFEST_SOURCE="$(mktemp -d)"
+mkdir -p \
+  "$TMP_MANIFEST_SOURCE/scripts" \
+  "$TMP_MANIFEST_SOURCE/cn_dicts" \
+  "$TMP_MANIFEST_SOURCE/cn_dicts_wanxiang" \
+  "$TMP_MANIFEST_SOURCE/en_dicts" \
+  "$TMP_MANIFEST_SOURCE/lua/cold_word_drop" \
+  "$TMP_MANIFEST_SOURCE/opencc" \
+  "$TMP_MANIFEST_SOURCE/.codegraph" \
+  "$TMP_MANIFEST_SOURCE/docs"
+cp "$ROOT/scripts/install.sh" "$TMP_MANIFEST_SOURCE/scripts/install.sh"
+cp \
+  "$ROOT/rime_ice.schema.yaml" \
+  "$ROOT/rime_ice.dict.yaml" \
+  "$ROOT/rime_ice.custom.yaml" \
+  "$ROOT/rime.lua" \
+  "$ROOT/custom_phrase.txt" \
+  "$ROOT/smart_chat_phrases.txt" \
+  "$TMP_MANIFEST_SOURCE/"
+cp "$ROOT/lua/force_gc.lua" "$TMP_MANIFEST_SOURCE/lua/force_gc.lua"
+cp \
+  "$ROOT/lua/cold_word_drop/drop_words.lua" \
+  "$ROOT/lua/cold_word_drop/hide_words.lua" \
+  "$ROOT/lua/cold_word_drop/reduce_freq_words.lua" \
+  "$TMP_MANIFEST_SOURCE/lua/cold_word_drop/"
 touch \
-  "$ROOT/user.yaml" \
-  "$ROOT/installation.yaml" \
-  "$ROOT/lua/cold_word_drop/runLog.txt" \
-  "$ROOT/.codegraph/ci-local.txt" \
-  "$ROOT/docs/ci-local.txt"
+  "$TMP_MANIFEST_SOURCE/user.yaml" \
+  "$TMP_MANIFEST_SOURCE/installation.yaml" \
+  "$TMP_MANIFEST_SOURCE/lua/cold_word_drop/runLog.txt" \
+  "$TMP_MANIFEST_SOURCE/.codegraph/ci-local.txt" \
+  "$TMP_MANIFEST_SOURCE/docs/ci-local.txt"
 
-TMP_MANIFEST_DIR="$(mktemp -d)"
-MANIFEST_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$ROOT/scripts/install.sh" --dry-run --no-download-gram)"
+TMP_MANIFEST_ROOT="$(mktemp -d)"
+TMP_MANIFEST_DIR="$TMP_MANIFEST_ROOT/target"
+mkdir -p "$TMP_MANIFEST_DIR"
+MANIFEST_OUTPUT="$(RIME_USER_DIR="$TMP_MANIFEST_DIR" "$TMP_MANIFEST_SOURCE/scripts/install.sh" --dry-run --no-download-gram --no-download-predict)"
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.schema\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime_ice\.dict\.yaml$'
 assert_in_manifest "$MANIFEST_OUTPUT" '^rime\.lua$'
@@ -187,6 +217,117 @@ test "$CHAT_PHRASE_BEFORE" = "$CHAT_PHRASE_AFTER"
 test "$COLD_DROP_BEFORE" = "$COLD_DROP_AFTER"
 test "$COLD_HIDE_BEFORE" = "$COLD_HIDE_AFTER"
 test "$COLD_REDUCE_BEFORE" = "$COLD_REDUCE_AFTER"
+
+printf 'Checking installer fail-closed and rollback boundaries...\n'
+TMP_TRANSACTION_ROOT="$(mktemp -d)"
+
+SYMLINK_TARGET="$TMP_TRANSACTION_ROOT/symlink-target"
+EXTERNAL_FILE="$TMP_TRANSACTION_ROOT/external-default.yaml"
+mkdir -p "$SYMLINK_TARGET"
+cp "$ROOT/PRIVACY.md" "$EXTERNAL_FILE"
+ln -s "$EXTERNAL_FILE" "$SYMLINK_TARGET/default.yaml"
+EXTERNAL_BEFORE="$(sha256_file "$EXTERNAL_FILE")"
+set +e
+SYMLINK_OUTPUT="$(RIME_USER_DIR="$SYMLINK_TARGET" "$ROOT/scripts/install.sh" --dry-run --no-download-gram --no-download-predict 2>&1)"
+SYMLINK_STATUS=$?
+set -e
+test "$SYMLINK_STATUS" -ne 0
+printf '%s\n' "$SYMLINK_OUTPUT" | grep 'Refusing to write through symlinks below the Rime target' >/dev/null
+test -L "$SYMLINK_TARGET/default.yaml"
+test "$EXTERNAL_BEFORE" = "$(sha256_file "$EXTERNAL_FILE")"
+
+SYMLINK_PARENT_TARGET="$TMP_TRANSACTION_ROOT/symlink-parent-target"
+SYMLINK_PARENT_EXTERNAL="$TMP_TRANSACTION_ROOT/symlink-parent-external"
+mkdir -p "$SYMLINK_PARENT_TARGET" "$SYMLINK_PARENT_EXTERNAL"
+ln -s "$SYMLINK_PARENT_EXTERNAL" "$SYMLINK_PARENT_TARGET/lua"
+set +e
+SYMLINK_PARENT_OUTPUT="$(RIME_USER_DIR="$SYMLINK_PARENT_TARGET" "$ROOT/scripts/install.sh" --dry-run --no-download-gram --no-download-predict 2>&1)"
+SYMLINK_PARENT_STATUS=$?
+set -e
+test "$SYMLINK_PARENT_STATUS" -ne 0
+printf '%s\n' "$SYMLINK_PARENT_OUTPUT" | grep 'Refusing to write through symlinks below the Rime target' >/dev/null
+test -z "$(find "$SYMLINK_PARENT_EXTERNAL" -mindepth 1 -print -quit)"
+
+NETWORK_TARGET="$TMP_TRANSACTION_ROOT/network-target"
+FAKE_CURL_BIN="$TMP_TRANSACTION_ROOT/fake-curl-bin"
+mkdir -p "$NETWORK_TARGET" "$FAKE_CURL_BIN"
+cp "$ROOT/PRIVACY.md" "$NETWORK_TARGET/rime_ice.custom.yaml"
+ln -s /usr/bin/false "$FAKE_CURL_BIN/curl"
+NETWORK_BEFORE="$(sha256_file "$NETWORK_TARGET/rime_ice.custom.yaml")"
+set +e
+NETWORK_OUTPUT="$(PATH="$FAKE_CURL_BIN:$PATH" RIME_USER_DIR="$NETWORK_TARGET" \
+  "$ROOT/scripts/install.sh" --skip-verify-gram --no-download-predict 2>&1)"
+NETWORK_STATUS=$?
+set -e
+test "$NETWORK_STATUS" -ne 0
+printf '%s\n' "$NETWORK_OUTPUT" | grep 'Downloading wanxiang-lts-zh-hans.gram' >/dev/null
+test "$NETWORK_BEFORE" = "$(sha256_file "$NETWORK_TARGET/rime_ice.custom.yaml")"
+test -z "$(find "$TMP_TRANSACTION_ROOT" -maxdepth 1 -type d -name 'network-target.backup.*' -print -quit)"
+
+ROLLBACK_TARGET="$TMP_TRANSACTION_ROOT/rollback-target"
+FAKE_CP_BIN="$TMP_TRANSACTION_ROOT/fake-cp-bin"
+mkdir -p "$ROLLBACK_TARGET" "$FAKE_CP_BIN"
+cp "$ROOT/PRIVACY.md" "$ROLLBACK_TARGET/default.yaml"
+cp "$ROOT/CONTRIBUTING.md" "$ROLLBACK_TARGET/rime.lua"
+DEFAULT_BEFORE="$(sha256_file "$ROLLBACK_TARGET/default.yaml")"
+RIME_LUA_BEFORE="$(sha256_file "$ROLLBACK_TARGET/rime.lua")"
+cat > "$FAKE_CP_BIN/cp" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */rollback-target/rime.lua) exit 73 ;;
+esac
+exec /bin/cp "$@"
+SH
+chmod +x "$FAKE_CP_BIN/cp"
+set +e
+ROLLBACK_OUTPUT="$(PATH="$FAKE_CP_BIN:$PATH" RIME_USER_DIR="$ROLLBACK_TARGET" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
+ROLLBACK_STATUS=$?
+set -e
+test "$ROLLBACK_STATUS" -eq 73
+printf '%s\n' "$ROLLBACK_OUTPUT" | grep 'restored the previous files from' >/dev/null
+test "$DEFAULT_BEFORE" = "$(sha256_file "$ROLLBACK_TARGET/default.yaml")"
+test "$RIME_LUA_BEFORE" = "$(sha256_file "$ROLLBACK_TARGET/rime.lua")"
+test ! -e "$ROLLBACK_TARGET/grammar.yaml"
+
+COLLISION_TARGET="$TMP_TRANSACTION_ROOT/collision-target"
+FIXED_DATE_BIN="$TMP_TRANSACTION_ROOT/fixed-date-bin"
+mkdir -p "$COLLISION_TARGET" "$FIXED_DATE_BIN"
+cat > "$FIXED_DATE_BIN/date" <<'SH'
+#!/bin/sh
+printf '20000101-000000\n'
+SH
+chmod +x "$FIXED_DATE_BIN/date"
+RIME_USER_DIR="$COLLISION_TARGET" "$TMP_MANIFEST_SOURCE/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+cp "$ROOT/PRIVACY.md" "$COLLISION_TARGET/rime_ice.custom.yaml"
+FIRST_EXPECTED="$(sha256_file "$COLLISION_TARGET/rime_ice.custom.yaml")"
+PATH="$FIXED_DATE_BIN:$PATH" RIME_USER_DIR="$COLLISION_TARGET" \
+  "$TMP_MANIFEST_SOURCE/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+cp "$ROOT/CONTRIBUTING.md" "$COLLISION_TARGET/rime_ice.custom.yaml"
+SECOND_EXPECTED="$(sha256_file "$COLLISION_TARGET/rime_ice.custom.yaml")"
+PATH="$FIXED_DATE_BIN:$PATH" RIME_USER_DIR="$COLLISION_TARGET" \
+  "$TMP_MANIFEST_SOURCE/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+FIRST_BACKUP="$TMP_TRANSACTION_ROOT/collision-target.backup.20000101-000000/rime_ice.custom.yaml"
+SECOND_BACKUP="$TMP_TRANSACTION_ROOT/collision-target.backup.20000101-000000.1/rime_ice.custom.yaml"
+test "$FIRST_EXPECTED" = "$(sha256_file "$FIRST_BACKUP")"
+test "$SECOND_EXPECTED" = "$(sha256_file "$SECOND_BACKUP")"
+
+if [ "$(uname -s)" = Linux ]; then
+  LINUX_HOME="$TMP_TRANSACTION_ROOT/linux-home"
+  mkdir -p "$LINUX_HOME"
+  set +e
+  LINUX_OUTPUT="$(env -u RIME_USER_DIR HOME="$LINUX_HOME" \
+    "$ROOT/scripts/install.sh" --dry-run --no-download-gram --no-download-predict 2>&1)"
+  LINUX_STATUS=$?
+  set -e
+  test "$LINUX_STATUS" -eq 2
+  printf '%s\n' "$LINUX_OUTPUT" | grep 'Linux requires an explicit RIME_USER_DIR' >/dev/null
+  test ! -e "$LINUX_HOME/Library/Rime"
+fi
 
 if [ "${SKIP_NETWORK_CHECK:-0}" != "1" ]; then
   printf 'Checking GitHub Release digest parser...\n'

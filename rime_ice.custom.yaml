@@ -31,7 +31,6 @@ patch:
       abbrev: [ 隔关, 隔 ]
       # 中英混排自动加空格（微信输入法式体验）。会改变上屏文本，默认关闭，
       # 需要时在方案菜单打开，状态会被记住。
-      reset: 0
     # 场景模式互斥：方案菜单只显示一个入口，避免聊天/写作/代码同时开启。
     - options: [ smart_normal, smart_chat, smart_write, smart_code ]
       states: [ 常规, 聊天, 写作, 代码 ]

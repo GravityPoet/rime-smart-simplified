@@ -9,6 +9,7 @@
 local filter = {}
 require("cold_word_drop.metatable")
 local reduce_state = require("cold_word_drop.reduce_state")
+local REORDER_CAP = 180
 
 function filter.init(env)
     local engine = env.engine
@@ -75,6 +76,14 @@ function filter.func(input, env)
 	local reduce_freq_words = env.reduce_freq_words
 	local now = os.time()
 
+	local function candidate_state(cand)
+		local cand_text = cand.text:gsub(" ", "")
+		local preedit_code = ((cand.preedit and cand.preedit ~= "") and cand.preedit or preedit_str):gsub(" ", "")
+		local hidden = table.find_index(drop_words, cand_text)
+			or (hide_words[cand_text] and table.find_index(hide_words[cand_text], preedit_code))
+		return hidden, cand_text, preedit_code
+	end
+
 	-- 新安装或尚未记录负反馈时，直接流式通过，避免每次按键都对候选做
 	-- gsub、线性查找和临时表分配。按下隐藏/降频快捷键后表会立刻变为非空，
 	-- 下一次刷新自然进入完整过滤路径，无需重载方案。
@@ -99,11 +108,10 @@ function filter.func(input, env)
 		return
 	end
 
-	for cand in input:iter() do
-		local cand_text = cand.text:gsub(" ", "")
-		local preedit_code = ((cand.preedit and cand.preedit ~= "") and cand.preedit or preedit_str):gsub(" ", "")
-		local hidden = table.find_index(drop_words, cand_text)
-			or (hide_words[cand_text] and table.find_index(hide_words[cand_text], preedit_code))
+	local iter = input:iter()
+	local scanned = 0
+	for cand in iter do
+		local hidden, cand_text, preedit_code = candidate_state(cand)
 
 		if not hidden then
 			local bucket = reduce_freq_words[cand_text]
@@ -121,12 +129,18 @@ function filter.func(input, env)
 			end
 		end
 
-		if #normal + #reduced >= 180 then
-			break
-		end
+		scanned = scanned + 1
+		if scanned >= REORDER_CAP then break end
 	end
 
 	yield_merged(normal, reduced)
+
+	-- 仅限制参与重排的前缀，不截断候选流。长尾继续应用永久删除/按码隐藏，
+	-- 软降频候选已经位于 180 名之后，无需再把它向前“降”到首屏位置。
+	for cand in iter do
+		local hidden = candidate_state(cand)
+		if not hidden then yield(cand) end
+	end
 end
 
 return filter

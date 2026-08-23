@@ -6,62 +6,65 @@
 # 🚀 Rime Smart Simplified Pack
 
 <p align="center">
-  <strong>"Combine absolute offline privacy with local LLM-level typing accuracy."</strong><br>
-  Out of the box · 401MB Wanxiang LTS Local LLM Model · One-click Install · Zero Telemetry
+  <strong>A locally processed Rime configuration pack for Simplified Chinese.</strong><br>
+  No runtime input uploads · Wanxiang LTS local 3-gram model · Cross-platform install scripts
 </p>
 
 <p align="center">
   <a href="https://github.com/GravityPoet/rime-smart-simplified/releases/latest"><img src="https://img.shields.io/github/v/release/GravityPoet/rime-smart-simplified?label=latest%20release&color=6366f1" alt="Latest Release" /></a>
-  <a href="https://github.com/GravityPoet/rime-smart-simplified/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
   <a href="#"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-a78bfa" alt="Platform" /></a>
 </p>
+
+> This is not a standalone input method. Install Squirrel, Weasel, Fcitx5 Rime, or IBus Rime first. The pack provides a full-pinyin scheme, dictionaries, a local grammar model, and Lua enhancements.
 
 <p align="center">
   <a href="https://github.com/GravityPoet/rime-smart-simplified/releases/latest"><strong>📦 Download Latest Release ZIP</strong></a>
   ·
   <a href="./INSTALL.en.md">Installation Guide</a>
   ·
-  <a href="./PRIVACY.md">Privacy Policy</a>
+  <a href="./PRIVACY.en.md">Privacy Boundary</a>
 </p>
 
 ---
 
 ## 🔥 Why Rime Smart Simplified?
 
-Still concerned about commercial input methods **tracking keystrokes and uploading your private data to the cloud**?<br>
+Want candidate quality without depending on a cloud input service, ads, or an account?<br>
 Or tried bare-bones Rime, only to be overwhelmed by **complex YAML configurations and poor default candidate rankings**?
 
-`rime-smart-simplified` combines **Rime Ice (雾凇拼音)**, **Wanxiang LTS Local Grammar Model (LMDG)**, and **automated installation scripts** to give you top-tier typing accuracy with **100% offline, privacy-first guarantees**!
+`rime-smart-simplified` combines **Rime Ice (雾凇拼音)**, the **Wanxiang LTS local grammar model (LMDG)**, and automated installation scripts. The first install downloads verified assets from official GitHub Releases; daily typing and local learning do not use a cloud input API.
 
 ### ⚡️ Comparison: Commercial IMEs vs Vanilla Rime vs Rime Smart Simplified
 
 | Dimension | Commercial IMEs | Vanilla Rime | ⚡️ Rime Smart Simplified |
 |---|---|---|---|
-| **Privacy & Security** | ❌ Keystrokes sent to cloud | 🔒 100% Local | 🔒 **100% Local & Offline. Zero Telemetry.** |
-| **First-Screen Accuracy** | ✅ High (via Cloud Computing) | ❌ Low (raw dictionary) | 🧠 **Powered by 401MB Wanxiang LTS LLM Model** |
-| **Setup Experience** | ✅ Simple | ❌ Complex YAML edits | 🚀 **One-click 3-second installer script** |
-| **Context Ranking** | ✅ Cloud-based | ❌ Rigid | 🎯 **Dynamic context ranking for full sentences** |
+| **Privacy & Security** | Some candidate features depend on cloud services, depending on product and settings | 🔒 Local input engine | 🔒 **Local runtime processing; official assets downloaded during installation** |
+| **First-Screen Accuracy** | Cloud corpora and ranking | Depends on the selected scheme, dictionaries, and configuration | 🧠 **Wanxiang LTS local 3-gram model plus local dictionaries** |
+| **Setup Experience** | Usually install and type | Requires choosing and maintaining a scheme | 🚀 **Install a Rime frontend, run the script, then deploy** |
+| **Long-sentence candidates** | Common cloud-assisted suggestions | Depends on the scheme and dictionaries | 🎯 **Local context ranking for longer input** |
 
 ---
 
 ## ✨ 3 Killer Features
 
-### 1. 🧠 High Precision via Local LLM Grammar Model
-Bundles the **Wanxiang LTS Local Grammar Model (LMDG)**. It analyzes sentence context locally to auto-correct homophone typos, boosting first-screen accuracy by over 80%!
+### 1. 🧠 Local Context Ranking via a 3-gram Model
+Bundles the **Wanxiang LTS local grammar model (LMDG)** to improve long-sentence candidates with local phrase probabilities and dynamic ranking. The repository does not claim an accuracy percentage without a reproducible benchmark; compare it with your own common sentences.
 
-### 2. 🚀 Zero Config · 3-Second One-Click Installer
+### 2. 🚀 One-Command Configuration Install
 No manual YAML editing required! Includes native one-click scripts for all platforms:
 - **macOS (Squirrel / 鼠须管)**: Double-click `Install-on-macOS.command`
 - **Windows (Weasel / 小狼毫)**: Double-click `Install-on-Windows.cmd`
-- **Linux (Fcitx5 / IBus)**: Run `bash ./scripts/install.sh`
-Preserves your existing custom dictionaries and user phrases automatically during upgrades.
+- **Linux / Fcitx5**: `RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh`
+- **Linux / IBus**: `RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh`
+The installer backs up files it will overwrite and preserves existing private phrases, chat phrases, and cold-word preferences. Merge custom YAML changes from the timestamped backup when needed.
 
-### 3. 🛡️ Pure Offline Privacy
-No cloud APIs, no network telemetry. All learning data and candidate rankings are kept strictly inside your local Rime directory.
+### 3. 🛡️ Local Runtime Processing
+The scheme does not call a cloud input API or upload typed content. Candidate ranking and learning data stay in the local Rime directory. The first install downloads and verifies the grammar model and prediction data from official GitHub Releases; see the [privacy boundary](./PRIVACY.en.md).
 
 ---
 
-## ⚡️ Quick Start (3 Steps)
+## ⚡️ Quick Start
 
 ### Prerequisites
 Make sure you have a Rime frontend installed:
@@ -71,11 +74,13 @@ Make sure you have a Rime frontend installed:
 
 ### 🛠️ Installation
 
+The default first install downloads a roughly 401 MB grammar model and 7 MB prediction database, so completion time depends on your connection. You must still deploy Rime afterward.
+
 1. **Download Asset**: Visit [Latest Release](https://github.com/GravityPoet/rime-smart-simplified/releases/latest) and download `rime-smart-simplified-vX.Y.Z.zip`.
 2. **Run Installer**:
    - macOS: Double-click `Install-on-macOS.command`
    - Windows: Double-click `Install-on-Windows.cmd`
-3. **Deploy**: Click **Deploy (重新部署)** from your Rime menu/tray icon.
+3. **Deploy**: Click **Deploy (重新部署)** from the corresponding Rime frontend menu, then select Rime Ice.
 
 ---
 

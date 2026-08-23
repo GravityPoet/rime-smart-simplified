@@ -75,10 +75,10 @@ if git grep -nEi 'YOUR_HANDLE|YOUR_EMAIL|YOUR_PHONE|YOUR_PRIVATE_PROJECT' -- \
   exit 1
 fi
 
-runtime_files="$(find . -type f \( -name '*.bak*' -o -name '*.userdb*' \
-  -o -name 'predict.db' -o -name 'context_boost*.tsv' \
-  -o -name 'pin_by_select*.tsv' \) -print)"
-test -z "$runtime_files"
+if git ls-files | rg '(^|/)(.*\.bak($|\.)|.*\.backup\.|.*\.userdb($|/)|predict\.db$|context_boost.*\.tsv$|pin_by_select.*\.tsv$)'; then
+  printf 'Tracked runtime or backup data must not enter a release archive.\n' >&2
+  exit 1
+fi
 test -z "$(git ls-files '*.gram')"
 
 source_urls="$(rg -o 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' \
@@ -105,10 +105,16 @@ the operator's live Rime user directory merely to satisfy the release gate.
 
 ### Package and checksums
 
-Set the current target explicitly; change it only for a later release:
+Set the intended new SemVer tag explicitly. The command refuses to reuse the
+old example version:
 
 ```bash
-RELEASE_VERSION=v1.0.0
+: "${RELEASE_VERSION:?Set RELEASE_VERSION to a new tag such as v1.1.0}"
+case "$RELEASE_VERSION" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *) printf 'RELEASE_VERSION must look like v1.2.3\n' >&2; exit 2 ;;
+esac
+test "$RELEASE_VERSION" != v1.0.0
 RELEASE_DIR="$(mktemp -d /tmp/rime-smart-simplified-release.XXXXXX)"
 ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
 
@@ -145,6 +151,11 @@ failure details.
 
 ```bash
 set -euo pipefail
+: "${RELEASE_VERSION:?Set RELEASE_VERSION to the reviewed new tag}"
+: "${RELEASE_DIR:?Set RELEASE_DIR to the verified package directory}"
+: "${RELEASE_NOTES:?Set RELEASE_NOTES to the reviewed release-notes file}"
+test -s "$RELEASE_NOTES"
+ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
 git push origin main
 
 TARGET_SHA="$(git rev-parse HEAD)"
@@ -199,28 +210,30 @@ while [ "$attempt" -le 30 ]; do
 done
 test "$CI_VERIFIED" -eq 1
 
-git tag -a v1.0.0 -m 'v1.0.0'
-git push origin v1.0.0
-gh release create v1.0.0 \
-  "$RELEASE_DIR/rime-smart-simplified-v1.0.0.zip" \
-  "$RELEASE_DIR/rime-smart-simplified-v1.0.0.zip.sha256" \
+git tag -a "$RELEASE_VERSION" -m "$RELEASE_VERSION"
+git push origin "$RELEASE_VERSION"
+gh release create "$RELEASE_VERSION" \
+  "$RELEASE_DIR/$ARTIFACT" \
+  "$RELEASE_DIR/$ARTIFACT.sha256" \
   --repo GravityPoet/rime-smart-simplified \
-  --verify-tag --title 'v1.0.0' --notes-file "$RELEASE_NOTES"
+  --verify-tag --title "$RELEASE_VERSION" --notes-file "$RELEASE_NOTES"
 ```
 
 ### Distribution verification
 
 ```bash
-gh release view v1.0.0 --repo GravityPoet/rime-smart-simplified \
+: "${RELEASE_VERSION:?Set RELEASE_VERSION to the published tag}"
+ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
+gh release view "$RELEASE_VERSION" --repo GravityPoet/rime-smart-simplified \
   --json url,tagName,isDraft,isPrerelease,assets
 
 DOWNLOAD_DIR="$(mktemp -d /tmp/rime-smart-simplified-download.XXXXXX)"
-gh release download v1.0.0 --repo GravityPoet/rime-smart-simplified \
+gh release download "$RELEASE_VERSION" --repo GravityPoet/rime-smart-simplified \
   --dir "$DOWNLOAD_DIR"
 (
   cd "$DOWNLOAD_DIR"
-  shasum -a 256 -c rime-smart-simplified-v1.0.0.zip.sha256
-  unzip -t rime-smart-simplified-v1.0.0.zip
+  shasum -a 256 -c "$ARTIFACT.sha256"
+  unzip -t "$ARTIFACT"
 )
 ```
 

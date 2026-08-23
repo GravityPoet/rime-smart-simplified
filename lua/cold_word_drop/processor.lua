@@ -28,7 +28,10 @@ local function add_action_key(action_map, key_repr, action_type)
 		local no_shift_prefix = prefix:gsub("Shift%+$", "")
 		action_map[prefix .. lower_key] = action_type
 		action_map[prefix .. upper_key] = action_type
-		action_map[no_shift_prefix .. lower_key] = action_type
+		-- Some frontends encode Shift through the uppercase key symbol and
+		-- report Control+Shift+d as Control+D.  Keep that compatibility form,
+		-- but never map the lowercase Control+d form: that is a distinct
+		-- shortcut and must not trigger a destructive candidate action.
 		action_map[no_shift_prefix .. upper_key] = action_type
 	else
 		action_map[prefix .. lower_key] = action_type

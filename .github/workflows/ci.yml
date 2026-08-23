@@ -32,3 +32,23 @@ jobs:
           if (-not ($output -match "rime_ice.schema.yaml")) {
             throw "Windows installer dry run omitted rime_ice.schema.yaml."
           }
+
+  windows-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the installer on Windows PowerShell
+        shell: powershell
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "rime-smart-simplified-windows-real"
+          $output = .\scripts\install.ps1 -RimeUserDir $target -NoDownloadGram -NoDownloadPredict
+          $output | Write-Output
+          if (-not (Test-Path (Join-Path $target "rime_ice.schema.yaml"))) {
+            throw "Windows installer did not produce rime_ice.schema.yaml."
+          }
+          if (-not (Test-Path (Join-Path $target "smart_chat_phrases.txt"))) {
+            throw "Windows installer did not produce smart_chat_phrases.txt."
+          }

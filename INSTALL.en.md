@@ -72,7 +72,7 @@ RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 
 Your Linux distribution may also require its Rime, Lua, or grammar-model support packages. Package names vary by distribution.
 
-The installers create a timestamped backup before overwriting files, preserve existing `custom_phrase.txt`, `smart_chat_phrases.txt`, and cold-word preference files, and verify the grammar model before moving it from its temporary download path.
+The installers stage and verify downloads before changing the Rime directory, create a collision-free timestamped backup before overwriting files, and preserve existing `custom_phrase.txt`, `smart_chat_phrases.txt`, and cold-word preference files. A write failure restores overwritten files and removes files created by that attempt. On Linux, omitting `RIME_USER_DIR` fails with both valid commands instead of writing to a macOS path. A symlink at a destination or at a parent below the target fails closed; the `RIME_USER_DIR` target itself may still be a symlink.
 
 ## 2. Dry run and advanced options
 
@@ -120,7 +120,7 @@ Automatic spacing between Chinese and English (e.g. `VIP中P` → `VIP 中 P`, p
 ## 4. Install from source (developers)
 
 ```bash
-git clone --branch v1.0.1 https://github.com/GravityPoet/rime-smart-simplified.git
+git clone https://github.com/GravityPoet/rime-smart-simplified.git
 cd rime-smart-simplified
 bash ./scripts/install.sh
 ```
@@ -137,7 +137,7 @@ https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.g
 
 ## 6. Rollback
 
-Restore the timestamped backup printed by the installer, then deploy again.
+Installation failures are restored automatically by the current installers. The commands below are for deliberately restoring overwritten files after a successful install: exit the Rime frontend, copy the timestamped backup, and deploy again. A timestamped backup does not remove files newly introduced by the install, so this is restoration rather than a complete uninstall.
 
 macOS:
 

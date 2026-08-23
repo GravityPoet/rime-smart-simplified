@@ -113,6 +113,57 @@ test("datetime translator emits RFC3339 first", function()
     "first datetime candidate must be UTC+8 RFC3339")
 end)
 
+test("UUID translator uses a native Windows backend and bounds failed process launches", function()
+  package.loaded.uuid = nil
+  local module = require("uuid")
+  local windows_commands = module._test.commands_for_separator([[\]])
+  expect_equal(#windows_commands, 1)
+  expect(windows_commands[1]:find("powershell.exe", 1, true) ~= nil,
+    "Windows UUID generation must not depend on /usr/bin or Python")
+  local platform_commands = module._test.commands_for_separator(package.config:sub(1, 1))
+
+  local config = { get_string = function() return nil end }
+  module.init({ name_space = "*uuid", engine = { schema = { config = config } } })
+  local old_popen = io.popen
+  local values = {
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-9222-222222222222",
+    "33333333-3333-4333-a333-333333333333",
+  }
+  local calls = 0
+  io.popen = function()
+    calls = calls + 1
+    return {
+      read = function() return values[calls] end,
+      close = function() return true end,
+    }
+  end
+  local ok, result = pcall(function()
+    return collect(function() module.func("uuid", { start = 0, _end = 4 }, {}) end)
+  end)
+  io.popen = old_popen
+  if not ok then error(result) end
+  expect_equal(#result, 3)
+  expect_equal(calls, 3, "a working backend should be reused for all requested UUIDs")
+
+  calls = 0
+  io.popen = function()
+    calls = calls + 1
+    return {
+      read = function() return nil end,
+      close = function() return true end,
+    }
+  end
+  ok, result = pcall(function()
+    return collect(function() module.func("uuid", { start = 0, _end = 4 }, {}) end)
+  end)
+  io.popen = old_popen
+  if not ok then error(result) end
+  expect_equal(#result, 0)
+  expect_equal(calls, #platform_commands,
+    "each unavailable backend should be tried once instead of spawning 72 failed processes")
+end)
+
 test("smart modes use deterministic code priority for legacy mixed state", function()
   package.loaded.smart_mode_filter = nil
   local module = require("smart_mode_filter")
@@ -155,6 +206,41 @@ test("smart mode reorders within the cap and streams the tail", function()
   expect(found, "tail candidates beyond the cap must still be yielded")
 end)
 
+test("short-code cleanup bounds work before first yield and streams the tail", function()
+  package.loaded.short_code_clean_filter = nil
+  local module = require("short_code_clean_filter")
+  local env = { engine = { context = fake_context({}, "ni") } }
+
+  local consumed = 0
+  local index = 0
+  local lazy_input = {
+    iter = function()
+      return function()
+        index = index + 1
+        if index > 10000 then return nil end
+        consumed = consumed + 1
+        return candidate("候选" .. index)
+      end
+    end,
+  }
+  local old_yield = _G.yield
+  _G.yield = coroutine.yield
+  local co = coroutine.create(function() module.func(lazy_input, env) end)
+  local ok, first = coroutine.resume(co)
+  _G.yield = old_yield
+  if not ok then error(first) end
+  expect_equal(consumed, 100, "short-code filter must yield after its bounded reorder prefix")
+  expect_equal(first.text, "候选1")
+
+  local candidates = {}
+  for i = 1, 250 do candidates[i] = candidate("候选" .. i) end
+  candidates[80] = candidate("GitHub", "abbrev")
+  local output = collect(function() module.func(input_from(candidates), env) end)
+  expect_equal(#output, 250, "short-code cleanup must preserve deep paging")
+  expect_equal(output[1].text, "GitHub", "protected candidates inside the reorder prefix stay promoted")
+  expect_equal(output[250].text, "候选250", "tail candidates must keep streaming")
+end)
+
 test("pin_by_select disconnects its commit notifier on fini", function()
   package.loaded.pin_by_select = nil
   local root_dir = test_tmp_root
@@ -173,6 +259,127 @@ test("pin_by_select disconnects its commit notifier on fini", function()
   _G.rime_api = old_rime_api
   expect(disconnected, "fini must disconnect the commit notifier")
   os.remove(root_dir .. "/pin_by_select_v2.tsv")
+end)
+
+test("pin_by_select keeps shared learning when two engines initialize together", function()
+  package.loaded.pin_by_select = nil
+  local root_dir = test_tmp_root
+  local data_path = root_dir .. "/pin_by_select_v2.tsv"
+  os.remove(data_path)
+  local old_rime_api = _G.rime_api
+  _G.rime_api = { get_user_data_dir = function() return root_dir end }
+  local callbacks = {}
+  local committed = "你"
+  local function make_env()
+    local context = {
+      commit_notifier = { connect = function(_, fn)
+        callbacks[#callbacks + 1] = fn
+        return { disconnect = function() end }
+      end },
+      input = "ni",
+      get_commit_text = function() return committed end,
+    }
+    return { engine = { context = context } }, context
+  end
+  local env1 = make_env()
+  local env2 = make_env()
+  local module = require("pin_by_select")
+  module.init(env1)
+  callbacks[1](env1.engine.context)
+  module.init(env2)
+  callbacks[1](env1.engine.context)
+  module.fini(env1)
+  module.fini(env2)
+  _G.rime_api = old_rime_api
+
+  local saved = assert(io.open(data_path, "r")):read("*a")
+  expect(saved:match("2:%d+:你") ~= nil,
+    "a second engine must not reload away unsaved pin counts")
+  os.remove(data_path)
+end)
+
+test("cold-word shortcuts preserve the configured Shift modifier", function()
+  package.loaded["cold_word_drop.processor"] = nil
+  local module = require("cold_word_drop.processor")
+  local old_rime_api = _G.rime_api
+  local old_open = io.open
+  _G.rime_api = {
+    get_user_data_dir = function() return test_tmp_root end,
+    get_distribution_code_name = function() return "Squirrel" end,
+  }
+  io.open = function()
+    return {
+      setvbuf = function() end,
+      write = function() return true end,
+      close = function() return true end,
+    }
+  end
+
+  local context = {
+    get_script_text = function() return "ni" end,
+    has_menu = function() return true end,
+    get_selected_candidate = function() return { text = "你" } end,
+    refresh_non_confirmed_composition = function() end,
+  }
+  local env = {
+    engine = { context = context },
+    drop_cand_key = "Control+Shift+d",
+    hide_cand_key = "Control+Shift+x",
+    reduce_cand_key = "Control+Shift+j",
+    drop_words = {},
+    hide_words = {},
+    reduce_freq_words = {},
+  }
+  env.tbls = {
+    drop_list = env.drop_words,
+    hide_list = env.hide_words,
+    reduce_freq_list = env.reduce_freq_words,
+  }
+  local function press(repr)
+    return module.func({ repr = function() return repr end }, env)
+  end
+
+  local ok, err = pcall(function()
+    expect_equal(press("Control+d"), 2, "Control+d must remain available to the host editor")
+    expect_equal(press("Control+x"), 2, "Control+x must not hide a candidate without Shift")
+    expect_equal(press("Control+j"), 2, "Control+j must not reduce a candidate without Shift")
+    expect_equal(next(env.drop_words), nil)
+    expect_equal(next(env.hide_words), nil)
+    expect_equal(next(env.reduce_freq_words), nil)
+
+    -- Rime frontends may encode Shift by uppercasing the key symbol.
+    expect_equal(press("Control+D"), 1)
+    expect_equal(press("Control+X"), 1)
+    expect_equal(press("Control+J"), 1)
+    expect_equal(env.drop_words[1], "你")
+    expect(env.hide_words["你"] ~= nil, "shifted hide shortcut should still work")
+    expect(env.reduce_freq_words["你"] ~= nil, "shifted reduce shortcut should still work")
+  end)
+  io.open = old_open
+  _G.rime_api = old_rime_api
+  if not ok then error(err) end
+end)
+
+test("cold-word filter keeps and filters candidates beyond the reorder cap", function()
+  package.loaded["cold_word_drop.filter"] = nil
+  local module = require("cold_word_drop.filter")
+  local candidates = {}
+  for i = 1, 250 do candidates[i] = candidate("候选" .. i) end
+  local env = {
+    engine = { context = { input = "test", composition = nil } },
+    drop_words = { "候选220" },
+    hide_words = {},
+    reduce_freq_words = {},
+    word_reduce_idx = 5,
+    reduce_recover_uses = 6,
+    reduce_ttl_days = 14,
+  }
+  local output = collect(function() module.func(input_from(candidates), env) end)
+  expect_equal(#output, 249, "the reorder cap must not truncate deep paging")
+  expect_equal(output[#output].text, "候选250")
+  for _, cand in ipairs(output) do
+    expect(cand.text ~= "候选220", "drop rules must still apply beyond the reorder prefix")
+  end
 end)
 
 test("chat phrase file overrides built-in defaults and tolerates comments", function()
@@ -350,6 +557,55 @@ test("context filter disconnects its commit notifier on fini", function()
   _G.rime_api = old_rime_api
   expect(disconnected, "fini must disconnect the commit notifier")
   expect_equal(env.commit_connection, nil, "fini must clear the stored connection")
+end)
+
+test("context instances share the map but keep histories per engine", function()
+  package.loaded.context_boost_filter = nil
+  local root_dir = test_tmp_root
+  local data_path = root_dir .. "/context_boost.tsv"
+  local journal_path = root_dir .. "/context_boost.journal.tsv"
+  os.remove(data_path)
+  os.remove(journal_path)
+  local old_rime_api = _G.rime_api
+  _G.rime_api = { get_user_data_dir = function() return root_dir end }
+  local callbacks = {}
+  local committed = { "甲", "乙", "丙" }
+  local function make_env(index)
+    local context = {
+      commit_notifier = { connect = function(_, fn)
+        callbacks[index] = fn
+        return { disconnect = function() end }
+      end },
+      get_commit_text = function() return committed[index] end,
+    }
+    return { engine = { context = context } }, context
+  end
+  local env1 = make_env(1)
+  local env2 = make_env(2)
+  local module = require("context_boost_filter")
+  module.init(env1)
+  callbacks[1](env1.engine.context)
+  committed[1] = "乙"
+  callbacks[1](env1.engine.context)
+  module.init(env2)
+  committed[2] = "丁"
+  callbacks[2](env2.engine.context)
+  committed[1] = "丙"
+  callbacks[1](env1.engine.context)
+  module.fini(env1)
+  module.fini(env2)
+  _G.rime_api = old_rime_api
+
+  local loaded = {}
+  local rows = module._test.load_file(journal_path, loaded)
+  expect(rows >= 2, "shared map should retain pairs learned before the second engine")
+  expect(loaded["甲"] ~= nil, "first engine learning must survive second initialization")
+  expect(loaded["乙"] ~= nil, "each engine must continue writing to the shared map")
+  for _, item in ipairs(loaded["乙"] or {}) do
+    expect(item.text ~= "丁", "histories from separate engines must not be joined")
+  end
+  os.remove(data_path)
+  os.remove(journal_path)
 end)
 
 test("context one-shot learning is active only in the current session", function()
