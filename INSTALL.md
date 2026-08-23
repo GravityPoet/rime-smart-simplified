@@ -156,6 +156,8 @@ RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --dry-run
 RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --apply
 ```
 
+卸载器会校验 manifest 的源记录摘要、当前包源文件/模型锁摘要、重复项和本包可安装路径；如果你手动编辑、截断或迁移了 manifest，它会停止并保留目标文件，不会把任意私有路径或伪造摘要当成可删除项。此时请从当前仓库重新运行一次安装器生成新的 manifest，再重新预览卸载。`RIME_PACKAGE_VERSION` 只能使用单行安全版本字符，含换行或制表符的值会让安装在写入前熔断。
+
 Linux 将 `RIME_USER_DIR` 换成 Fcitx5 或 IBus 的实际目录。卸载器只删除摘要仍与安装时一致的项目文件；被你修改过的 YAML、词库、私人短语、学习偏好和已有模型会保留，并逐项报告。默认会在删除前创建时间戳备份；`--no-backup` 只适合你已有独立备份时使用。Windows 等价命令为：
 
 ```powershell

@@ -12,6 +12,9 @@ TMP_BEHAVIOR_DIR=""
 TMP_WINDOWS_DIR=""
 TMP_TRANSACTION_ROOT=""
 TMP_UNINSTALL_DIR=""
+TMP_TAMPER_DIR=""
+TMP_INJECTION_DIR=""
+TMP_FORGE_DIR=""
 
 cleanup() {
   if [ -n "$TMP_RIME_DIR" ]; then
@@ -34,6 +37,15 @@ cleanup() {
   fi
   if [ -n "$TMP_UNINSTALL_DIR" ]; then
     rm -rf "$TMP_UNINSTALL_DIR"
+  fi
+  if [ -n "$TMP_TAMPER_DIR" ]; then
+    rm -rf "$TMP_TAMPER_DIR"
+  fi
+  if [ -n "$TMP_INJECTION_DIR" ]; then
+    rm -rf "$TMP_INJECTION_DIR"
+  fi
+  if [ -n "$TMP_FORGE_DIR" ]; then
+    rm -rf "$TMP_FORGE_DIR"
   fi
 }
 trap cleanup EXIT
@@ -88,6 +100,18 @@ sha256_file() {
   else
     printf 'Neither shasum nor sha256sum is available; cannot hash %s\n' "$1" >&2
     exit 1
+  fi
+}
+
+github_api_get() {
+  url="$1"
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -fsSL --retry 2 --connect-timeout 10 --max-time 45 \
+      -H 'Accept: application/vnd.github+json' \
+      -H "Authorization: Bearer $GITHUB_TOKEN" "$url"
+  else
+    curl -fsSL --retry 2 --connect-timeout 10 --max-time 45 \
+      -H 'Accept: application/vnd.github+json' "$url"
   fi
 }
 
@@ -262,6 +286,22 @@ test "$SYMLINK_PARENT_STATUS" -ne 0
 printf '%s\n' "$SYMLINK_PARENT_OUTPUT" | grep 'Refusing to write through symlinks below the Rime target' >/dev/null
 test -z "$(find "$SYMLINK_PARENT_EXTERNAL" -mindepth 1 -print -quit)"
 
+HARDLINK_TARGET="$TMP_TRANSACTION_ROOT/hardlink-target"
+HARDLINK_EXTERNAL="$TMP_TRANSACTION_ROOT/hardlink-external.yaml"
+mkdir -p "$HARDLINK_TARGET"
+printf 'PRIVATE-HARDLINK-SENTINEL\n' > "$HARDLINK_EXTERNAL"
+ln "$HARDLINK_EXTERNAL" "$HARDLINK_TARGET/default.yaml"
+HARDLINK_BEFORE="$(sha256_file "$HARDLINK_EXTERNAL")"
+set +e
+HARDLINK_OUTPUT="$(RIME_USER_DIR="$HARDLINK_TARGET" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
+HARDLINK_STATUS=$?
+set -e
+test "$HARDLINK_STATUS" -ne 0
+printf '%s\n' "$HARDLINK_OUTPUT" | grep 'Refusing to overwrite hard-linked files below the Rime target' >/dev/null
+test "$HARDLINK_BEFORE" = "$(sha256_file "$HARDLINK_EXTERNAL")"
+HARDLINK_COUNT="$(stat -c '%h' "$HARDLINK_EXTERNAL" 2>/dev/null || stat -f '%l' "$HARDLINK_EXTERNAL")"
+test "$HARDLINK_COUNT" -gt 1
+
 NETWORK_TARGET="$TMP_TRANSACTION_ROOT/network-target"
 FAKE_CURL_BIN="$TMP_TRANSACTION_ROOT/fake-curl-bin"
 mkdir -p "$NETWORK_TARGET" "$FAKE_CURL_BIN"
@@ -346,7 +386,7 @@ fi
 if [ "${SKIP_NETWORK_CHECK:-0}" != "1" ]; then
   printf 'Checking GitHub Release digest parser...\n'
   GRAM_DIGEST="$(
-    curl -fsSL https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS |
+    github_api_get https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS |
       awk -v name="wanxiang-lts-zh-hans.gram" '
         index($0, "\"name\": \"" name "\"") { found = 1 }
         found && index($0, "\"digest\":") {
@@ -423,5 +463,51 @@ RIME_USER_DIR="$TMP_UNINSTALL_DIR" "$ROOT/scripts/uninstall.sh" --apply >/dev/nu
 test -f "$TMP_UNINSTALL_DIR/custom_phrase.txt"
 test ! -f "$TMP_UNINSTALL_DIR/rime_ice.schema.yaml"
 test -f "$TMP_UNINSTALL_DIR/.rime-smart-simplified.install-manifest"
+
+printf 'Checking ownership manifest tamper boundary...\n'
+TMP_TAMPER_DIR="$(mktemp -d)"
+RIME_USER_DIR="$TMP_TAMPER_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+printf 'PRIVATE-TAMPER-SENTINEL\n' > "$TMP_TAMPER_DIR/private_user_file.txt"
+TAMPER_SHA="$(sha256_file "$TMP_TAMPER_DIR/private_user_file.txt")"
+printf 'file\tprivate_user_file.txt\t%s\t%s\tmanaged\n' "$TAMPER_SHA" "$TAMPER_SHA" >> \
+  "$TMP_TAMPER_DIR/.rime-smart-simplified.install-manifest"
+set +e
+TAMPER_OUTPUT="$(RIME_USER_DIR="$TMP_TAMPER_DIR" "$ROOT/scripts/uninstall.sh" --apply 2>&1)"
+TAMPER_STATUS=$?
+set -e
+test "$TAMPER_STATUS" -ne 0
+printf '%s\n' "$TAMPER_OUTPUT" | grep 'source hash mismatch\|not installable by this package' >/dev/null
+test -f "$TMP_TAMPER_DIR/private_user_file.txt"
+
+printf 'Checking forged digest protection for allowed paths...\n'
+TMP_FORGE_DIR="$(mktemp -d)"
+RIME_USER_DIR="$TMP_FORGE_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+printf 'PRIVATE-FORGED-SENTINEL\n' > "$TMP_FORGE_DIR/custom_phrase.txt"
+FORGED_SHA="$(sha256_file "$TMP_FORGE_DIR/custom_phrase.txt")"
+awk -F '\t' -v forged="$FORGED_SHA" 'BEGIN { OFS = "\t" } $1 == "file" && $2 == "custom_phrase.txt" { $3 = forged; $4 = forged } { print }' \
+  "$TMP_FORGE_DIR/.rime-smart-simplified.install-manifest" > "$TMP_FORGE_DIR/manifest.forged"
+awk -F '\t' '$1 == "file" { printf "%s\t%s\t%s\n", $2, $4, $5 }' \
+  "$TMP_FORGE_DIR/manifest.forged" > "$TMP_FORGE_DIR/manifest-records"
+FORGED_SOURCE_HASH="$(sha256_file "$TMP_FORGE_DIR/manifest-records")"
+awk -v replacement="$FORGED_SOURCE_HASH" '/^# source_hash=sha256:/ { $0 = "# source_hash=sha256:" replacement } { print }' \
+  "$TMP_FORGE_DIR/manifest.forged" > "$TMP_FORGE_DIR/.rime-smart-simplified.install-manifest"
+set +e
+FORGE_OUTPUT="$(RIME_USER_DIR="$TMP_FORGE_DIR" "$ROOT/scripts/uninstall.sh" --apply 2>&1)"
+FORGE_STATUS=$?
+set -e
+test "$FORGE_STATUS" -ne 0
+printf '%s\n' "$FORGE_OUTPUT" | grep 'source digest does not match the package lock' >/dev/null
+test -f "$TMP_FORGE_DIR/custom_phrase.txt"
+
+printf 'Checking manifest metadata injection boundary...\n'
+TMP_INJECTION_DIR="$(mktemp -d)"
+set +e
+RIME_USER_DIR="$TMP_INJECTION_DIR" \
+  RIME_PACKAGE_VERSION=$'safe\nfile\tprivate_user_file.txt' \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null 2>&1
+INJECTION_STATUS=$?
+set -e
+test "$INJECTION_STATUS" -ne 0
+test ! -e "$TMP_INJECTION_DIR/.rime-smart-simplified.install-manifest"
 
 printf 'Verification passed.\n'

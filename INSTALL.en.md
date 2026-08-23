@@ -82,6 +82,8 @@ RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --dry-run
 RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --apply
 ```
 
+The uninstaller validates the manifest source-record digest, current package/model-lock digests, duplicate entries, and this package's installable-path allow-list. If the manifest was manually edited, truncated, or moved across package versions, it stops and preserves the target instead of treating an arbitrary private path or forged digest as removable. Re-run the current installer to generate a fresh manifest before retrying. `RIME_PACKAGE_VERSION` must be a single-line safe version value; a value containing a newline or tab aborts before the install is committed.
+
 On Linux, use the actual Fcitx5 or IBus directory. The uninstaller removes only files whose digest still matches the install record. Edited YAML, dictionaries, private phrases, learning preferences, and pre-existing model files are preserved and reported. A timestamped backup is created by default; use `--no-backup` only when you already have an independent backup. Windows equivalents are:
 
 ```powershell

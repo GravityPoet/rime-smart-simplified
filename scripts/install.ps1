@@ -100,6 +100,44 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $content, $encoding)
 }
 
+function Assert-SafeManifestValue {
+    param(
+        [string]$Value,
+        [string]$Label
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch '^[A-Za-z0-9._:+/@=-]+$') {
+        throw "$Label contains characters that cannot be represented safely in the ownership manifest."
+    }
+}
+
+function Test-HardLink {
+    param(
+        [object]$Item,
+        [string]$Path
+    )
+
+    $linkTypeProperty = $Item.PSObject.Properties["LinkType"]
+    if ($null -ne $linkTypeProperty -and [string]$Item.LinkType -eq "HardLink") {
+        return $true
+    }
+
+    # Windows PowerShell 5.1 does not expose LinkType consistently. fsutil is
+    # built into supported Windows versions and reports every directory entry
+    # sharing the same NTFS file record.
+    if ($env:OS -eq "Windows_NT") {
+        $fsutil = Get-Command fsutil.exe -ErrorAction SilentlyContinue
+        if ($null -ne $fsutil) {
+            $hardlinkLines = @(& $fsutil.Source hardlink list $Path 2>$null | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            $fsutilStatus = $LASTEXITCODE
+            if ($fsutilStatus -eq 0 -and $hardlinkLines.Count -gt 1) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 function New-UniqueBackupDirectory {
     param([string]$BasePath)
 
@@ -383,6 +421,9 @@ try {
             if ($existingItem.PSIsContainer) {
                 throw "Refusing to overwrite a non-regular install destination: $($entry.DestinationPath)"
             }
+            if (Test-HardLink -Item $existingItem -Path $entry.DestinationPath) {
+                throw "Refusing to overwrite a hard-linked file below the Rime target; replace it first to protect external paths: $($entry.DestinationPath)"
+            }
             $entry.OriginallyExisted = $true
         } else {
             $entry.OriginallyExisted = $false
@@ -396,6 +437,9 @@ try {
     }
     if ($null -ne $markerItem -and $markerItem.PSIsContainer) {
         throw "Refusing to overwrite a non-regular install manifest: $MarkerPath"
+    }
+    if ($null -ne $markerItem -and (Test-HardLink -Item $markerItem -Path $MarkerPath)) {
+        throw "Refusing to overwrite a hard-linked install manifest; replace it first to protect external paths: $MarkerPath"
     }
 
     $SourceRecordLines = @()
@@ -413,6 +457,8 @@ try {
     $SourceTreeHash = (Get-FileHash -LiteralPath $SourceRecordsPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $PackageVersion = Get-PackageVersion
     $SourceRevision = Get-SourceRevision
+    Assert-SafeManifestValue -Value $PackageVersion -Label "RIME_PACKAGE_VERSION"
+    Assert-SafeManifestValue -Value $SourceRevision -Label "SOURCE_REVISION"
     $StagedManifest = Join-Path $StagingDir $InstallManifestName
     $ManifestLines = @(
         "# rime-smart-simplified install manifest v2"

@@ -18,6 +18,8 @@ jobs:
           sudo apt-get install -y g++ pkg-config lua5.4 librime-bin librime-dev
 
       - name: Verify Rime package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: LUAC_BIN=luac5.4 ./scripts/verify.sh
 
       - name: Verify release archive boundary
@@ -40,6 +42,38 @@ jobs:
           if (-not ($output -match "rime_ice.schema.yaml")) {
             throw "Windows installer dry run omitted rime_ice.schema.yaml."
           }
+
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install benchmark tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ pkg-config lua5.4 librime-bin librime-dev
+
+      - name: Run reproducible isolated benchmark
+        run: |
+          result="$RUNNER_TEMP/rime-smart-simplified-benchmark.jsonl"
+          LUA_BIN=lua5.4 ./scripts/benchmark.sh --iterations 20 --output "$result"
+          python3 - "$result" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              records = [json.loads(line) for line in fh if line.strip()]
+          assert len(records) >= 6, len(records)
+          assert records[0]["record"] == "run"
+          assert any(r["record"] == "isolated_install_proxy" for r in records)
+          assert any(r["record"] == "isolated_rime_build_proxy" for r in records)
+          assert any(r["record"] == "librime_candidate_smoke_proxy" for r in records)
+          assert all(r["accuracy_claim"] is False for r in records)
+          assert all(r["proxy"] is True for r in records)
+          print(f"benchmark_records={len(records)} accuracy_claim=false proxy=true")
+          PY
 
   windows-installer:
     runs-on: windows-latest
@@ -88,6 +122,46 @@ jobs:
             throw "Windows uninstall should retain the manifest while edited files remain."
           }
 
+      - name: Verify hardlink and manifest tamper boundaries
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "rime-smart-simplified-windows-boundaries"
+          $target = Join-Path $root "hardlink-target"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $outside = Join-Path $root "outside.yaml"
+          Set-Content -LiteralPath $outside -Value "PRIVATE-HARDLINK-SENTINEL"
+          New-Item -ItemType HardLink -Path (Join-Path $target "default.yaml") -Target $outside | Out-Null
+          try {
+            .\scripts\install.ps1 -RimeUserDir $target -NoDownloadGram -NoDownloadPredict
+            throw "Installer unexpectedly overwrote a hard-linked file."
+          } catch {
+            if ($_.Exception.Message -notmatch "hard-linked file") {
+              throw
+            }
+          }
+          if ((Get-Content -Raw -LiteralPath $outside) -notmatch "PRIVATE-HARDLINK-SENTINEL") {
+            throw "Hard-linked external file was modified."
+          }
+
+          $tamperTarget = Join-Path $root "tamper-target"
+          .\scripts\install.ps1 -RimeUserDir $tamperTarget -NoDownloadGram -NoDownloadPredict
+          $private = Join-Path $tamperTarget "private_user_file.txt"
+          Set-Content -LiteralPath $private -Value "PRIVATE-TAMPER-SENTINEL"
+          $sha = (Get-FileHash -LiteralPath $private -Algorithm SHA256).Hash.ToLowerInvariant()
+          $entry = "file" + [char]9 + "private_user_file.txt" + [char]9 + $sha + [char]9 + $sha + [char]9 + "managed"
+          Add-Content -LiteralPath (Join-Path $tamperTarget ".rime-smart-simplified.install-manifest") -Value $entry
+          try {
+            .\scripts\uninstall.ps1 -RimeUserDir $tamperTarget -Apply
+            throw "Tampered manifest unexpectedly allowed deletion."
+          } catch {
+            if ($_.Exception.Message -notmatch "not installable|source hash mismatch") {
+              throw
+            }
+          }
+          if (-not (Test-Path -LiteralPath $private)) {
+            throw "Tampered manifest removed a private file."
+          }
+
   macos-rime:
     runs-on: macos-14
 
@@ -96,10 +170,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install verification tools
-        run: brew install lua pkg-config librime
+        run: brew install lua@5.4 pkgconf librime
 
       - name: Verify macOS package and real librime input boundary
-        run: ./scripts/verify.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          LUA_PREFIX="$(brew --prefix lua@5.4)"
+          export PATH="$LUA_PREFIX/bin:$PATH"
+          echo "$LUA_PREFIX/bin" >> "$GITHUB_PATH"
+          LUAC_BIN=luac5.4 LUA_BIN=lua5.4 ./scripts/verify.sh
 
   linux-frontends:
     runs-on: ubuntu-latest

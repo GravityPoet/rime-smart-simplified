@@ -25,19 +25,25 @@ not a signed application or installer.
 
 ## Preconditions
 
-- Required tools: `git`, authenticated `gh`, `bash`, `lua`, `luac`,
-  `rime_deployer`, `curl`, `python3`, `shasum`, `unzip`, and `actionlint`
-- Dependency install: none; CI installs `lua5.4` and `librime-bin`
+- Required tools: `git`, authenticated `gh`, `bash`, `lua`/`lua5.4`, `luac`/`luac5.4`,
+  `rime_deployer`, `curl`, `python3`, `shasum`, `unzip`, `rg`, and `actionlint`
+- Dependency matrix: Ubuntu verification installs `g++`, `pkg-config`, `lua5.4`,
+  `librime-bin`, and `librime-dev`; macOS verification installs Homebrew
+  `lua@5.4`, `pkgconf`, and `librime`; the Linux frontend job installs
+  `ibus-rime`, `fcitx5-rime`, and `librime-bin`; the Windows job uses Windows
+  PowerShell. Runner images and action revisions remain GitHub-managed and are
+  therefore an explicit environment-drift boundary.
 - Required clean state: `git status --short --branch` has no unrelated changes
 - Required remote state: local `main` is based on current `origin/main`, the target
-  tag and Release do not exist, and the operator has repository admin permission
+  tag and Release do not exist, and the token has the contents/workflow read-write
+  access required by the repository's branch rules
 - Required CI state: the exact release commit has successful GitHub Actions checks
-  named `verify`, `windows-installer`, `macos-rime`, `linux-frontends`, and
-  `upstream-freshness` before the tag is pushed
+  named `verify`, `benchmark`, `windows-installer`, `macos-rime`, `linux-frontends`,
+  and `upstream-freshness` before the tag is pushed
 - Primary path: local verification and archive creation, push `main`, wait for CI,
   push the annotated tag, then create the GitHub Release with archive and checksum
 - CI evidence path: inspect the tracked workflow, then query the commit Check Runs
-  endpoint with `gh api` by exact SHA and require all five named GitHub Actions
+  endpoint with `gh api` by exact SHA and require all six named GitHub Actions
   checks to complete successfully. Do not use `gh workflow list`, `gh run list`, or
   the Actions Run Detail endpoint while those endpoints are returning 503
 
@@ -73,9 +79,22 @@ All commands run from the repository root.
 ### Tool and privacy preflight
 
 ```bash
-command -v git gh bash lua luac rime_deployer curl python3 shasum unzip actionlint
+set -euo pipefail
+command -v git gh bash rime_deployer curl python3 shasum unzip actionlint
+command -v lua || command -v lua5.4
+command -v luac || command -v luac5.4
 gh auth status
 git status --short --branch
+origin_url="$(git remote get-url origin)"
+case "$origin_url" in
+  git@github.com:GravityPoet/rime-smart-simplified.git|https://github.com/GravityPoet/rime-smart-simplified.git) ;;
+  *) printf 'Unexpected origin URL: %s\n' "$origin_url" >&2; exit 1 ;;
+esac
+push_url="$(git remote get-url --push origin)"
+case "$push_url" in
+  git@github.com:GravityPoet/rime-smart-simplified.git|https://github.com/GravityPoet/rime-smart-simplified.git) ;;
+  *) printf 'Unexpected origin push URL: %s\n' "$push_url" >&2; exit 1 ;;
+esac
 git remote -v
 git fetch origin --prune --tags
 git rev-list --left-right --count origin/main...HEAD
@@ -105,6 +124,7 @@ EOF
 ### Verify
 
 ```bash
+set -euo pipefail
 ./scripts/verify.sh
 git diff --check
 ./scripts/check_release_archive.sh
@@ -126,6 +146,7 @@ the operator's live Rime user directory merely to satisfy the release gate.
 listed in `UPSTREAM_ASSETS.lock.json`. The update command is read-only by default:
 
 ```bash
+set -euo pipefail
 ./scripts/update_dicts.sh
 ```
 
@@ -133,6 +154,7 @@ To refresh those seven files, preserving the unrelated `cn_dicts/` user/domain
 词库, run:
 
 ```bash
+set -euo pipefail
 ./scripts/update_dicts.sh --apply
 ./scripts/check_upstream_freshness.sh --local-only --strict
 ./scripts/verify.sh
@@ -162,12 +184,18 @@ Set the intended new SemVer tag explicitly. The command refuses to reuse the
 old example version:
 
 ```bash
+set -euo pipefail
 : "${RELEASE_VERSION:?Set RELEASE_VERSION to a new tag such as v1.1.0}"
-case "$RELEASE_VERSION" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) printf 'RELEASE_VERSION must look like v1.2.3\n' >&2; exit 2 ;;
-esac
+if ! printf '%s\n' "$RELEASE_VERSION" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$' >/dev/null; then
+  printf 'RELEASE_VERSION must look like v1.2.3 or a SemVer prerelease\n' >&2
+  exit 2
+fi
 test "$RELEASE_VERSION" != v1.0.0
+if git show-ref --verify --quiet "refs/tags/$RELEASE_VERSION" || \
+  git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+  printf 'Target tag already exists locally or on origin: %s\n' "$RELEASE_VERSION" >&2
+  exit 1
+fi
 RELEASE_DIR="$(mktemp -d /tmp/rime-smart-simplified-release.XXXXXX)"
 ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
 
@@ -183,11 +211,11 @@ git archive --format=zip \
 
 EXTRACT_DIR="$(mktemp -d /tmp/rime-smart-simplified-extract.XXXXXX)"
 RIME_TEST_DIR="$(mktemp -d /tmp/rime-smart-simplified-rime.XXXXXX)"
-  unzip -q "$RELEASE_DIR/$ARTIFACT" -d "$EXTRACT_DIR"
-  test -x "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-macOS.command"
-  test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-Windows.cmd"
-  test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/scripts/install.ps1"
-  RIME_USER_DIR="$RIME_TEST_DIR" \
+unzip -q "$RELEASE_DIR/$ARTIFACT" -d "$EXTRACT_DIR"
+test -x "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-macOS.command"
+test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/Install-on-Windows.cmd"
+test -f "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/scripts/install.ps1"
+RIME_USER_DIR="$RIME_TEST_DIR" \
   "$EXTRACT_DIR/rime-smart-simplified-${RELEASE_VERSION}/scripts/install.sh" \
   --dry-run --no-download-gram
 ```
@@ -209,25 +237,43 @@ set -euo pipefail
 : "${RELEASE_NOTES:?Set RELEASE_NOTES to the reviewed release-notes file}"
 test -s "$RELEASE_NOTES"
 ARTIFACT="rime-smart-simplified-${RELEASE_VERSION}.zip"
+RELEASE_PROBE="$(mktemp /tmp/rime-smart-simplified-release-probe.XXXXXX)"
+set +e
+gh api "repos/GravityPoet/rime-smart-simplified/releases/tags/$RELEASE_VERSION" \
+  --include >"$RELEASE_PROBE" 2>&1
+RELEASE_PROBE_STATUS=$?
+set -e
+if [ "$RELEASE_PROBE_STATUS" -eq 0 ]; then
+  printf 'Target GitHub Release already exists: %s\n' "$RELEASE_VERSION" >&2
+  exit 1
+fi
+if ! grep -Eiq 'HTTP/[0-9.]+ 404|not found' "$RELEASE_PROBE"; then
+  printf 'Could not prove target GitHub Release is absent:\n' >&2
+  sed 's/^/  /' "$RELEASE_PROBE" >&2
+  exit 1
+fi
 git push origin main
 
 TARGET_SHA="$(git rev-parse HEAD)"
-REQUIRED_CHECKS="verify windows-installer macos-rime linux-frontends upstream-freshness"
+REQUIRED_CHECKS="verify benchmark windows-installer macos-rime linux-frontends upstream-freshness"
 CI_VERIFIED=0
 API_FAILURES=0
+CI_POLL_ATTEMPTS="${CI_POLL_ATTEMPTS:-180}"
+CI_POLL_SECONDS="${CI_POLL_SECONDS:-10}"
+CI_API_FAILURE_LIMIT="${CI_API_FAILURE_LIMIT:-12}"
 attempt=1
-while [ "$attempt" -le 30 ]; do
+while [ "$attempt" -le "$CI_POLL_ATTEMPTS" ]; do
   if ! CHECK_RUNS="$(gh api \
     -H 'Accept: application/vnd.github+json' \
-    "repos/GravityPoet/rime-smart-simplified/commits/$TARGET_SHA/check-runs" \
-    --jq '.check_runs[] | select(.app.slug == "github-actions") | [.name, .id, .status, (.conclusion // ""), .details_url] | @tsv')"
+    "repos/GravityPoet/rime-smart-simplified/commits/$TARGET_SHA/check-runs?per_page=100" \
+    --jq ".check_runs[] | select(.head_sha == \"$TARGET_SHA\" and .app.slug == \"github-actions\") | [.name, .id, .status, (.conclusion // \"\"), .details_url] | @tsv")"
   then
     API_FAILURES=$((API_FAILURES + 1))
-    if [ "$API_FAILURES" -ge 6 ]; then
-      printf 'GitHub Check Runs API failed six consecutive times.\n' >&2
+    if [ "$API_FAILURES" -ge "$CI_API_FAILURE_LIMIT" ]; then
+      printf 'GitHub Check Runs API failed %s consecutive times.\n' "$CI_API_FAILURE_LIMIT" >&2
       exit 1
     fi
-    sleep 5
+    sleep "$CI_POLL_SECONDS"
     attempt=$((attempt + 1))
     continue
   fi
@@ -272,7 +318,7 @@ while [ "$attempt" -le 30 ]; do
     CI_VERIFIED=1
     break
   fi
-  sleep 5
+  sleep "$CI_POLL_SECONDS"
   attempt=$((attempt + 1))
 done
 test "$CI_VERIFIED" -eq 1

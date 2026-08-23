@@ -5,7 +5,7 @@
 - [ ] `./scripts/check_release_archive.sh` 通过；归档不含 ownership manifest、benchmark 输出、用户/运行时数据库、模型、构建产物或备份目录。
 - [ ] `./scripts/check_upstream_freshness.sh --local-only --strict` 通过，且 `UPSTREAM_ASSETS.lock.json` 与七个万象词库内容一致。
 - [ ] 发布前 `./scripts/check_upstream_freshness.sh --strict` 通过；若 GitHub API 不可用，停止发布而不是使用 `--offline-ok`。
-- [ ] GitHub Actions `CI` 在目标提交的 `verify`、`windows-installer`、`macos-rime`、`linux-frontends`、`upstream-freshness` 五个 check 均为 `completed/success`。
+- [ ] GitHub Actions `CI` 在目标提交的 `verify`、`benchmark`、`windows-installer`、`macos-rime`、`linux-frontends`、`upstream-freshness` 六个 check 均为 `completed/success`。
 - [ ] 用自己的邮箱、手机号、账号名、内部项目名替换下面的占位符后扫描：`rg -n -i "YOUR_HANDLE|YOUR_EMAIL|YOUR_PHONE|YOUR_PRIVATE_PROJECT" .`。
 - [ ] `git ls-files | rg '(^|/)(.*\.bak($|\.)|.*\.backup\.|.*\.userdb($|/)|predict\.db$|.*\.gram$|\.rime-smart-simplified\.install-manifest$|benchmark-results\.jsonl$|context_boost.*\.tsv$|pin_by_select.*\.tsv$|runLog\.txt$)'` 无运行数据或备份命中；本机已忽略的回滚目录不会进入 `git archive`。
 - [ ] `git ls-files | rg "\.gram$"` 无命中。
