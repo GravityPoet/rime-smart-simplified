@@ -5,14 +5,17 @@
 | 来源 | 本仓库用途 | 许可证 | 官方链接 |
 |---|---|---|---|
 | rime-ice | 雾凇拼音方案、基础配置、部分词库与 Lua 组件 | GPL-3.0 | https://github.com/iDvel/rime-ice |
-| RIME-LMDG | 万象 LTS 简体词库与语言模型数据 | CC-BY-4.0 | https://github.com/amzxyz/RIME-LMDG |
+| RIME-LMDG | 安装期下载的万象 LTS 语法模型 | CC-BY-4.0 | https://github.com/amzxyz/RIME-LMDG |
+| rime-wanxiang | `cn_dicts_wanxiang/` 简体词典与更新源 | CC-BY-4.0 | https://github.com/amzxyz/rime-wanxiang |
+| librime-predict | 预测插件接口与安装期下载的 `predict.db` 来源 | BSD-3-Clause | https://github.com/rime/librime-predict |
 | rime-radical-pinyin | 部件拆字反查（方案与词库按 GPL-3.0，lua/search.lua 头部标注 CC BY-SA 4.0） | GPL-3.0 / CC BY-SA 4.0 | https://github.com/mirtlecn/rime-radical-pinyin |
 | plum | Rime 配方管理工具，许可证文本归档 | LGPL-3.0 | https://github.com/rime/plum |
 
 许可证文本位于：
 
 - `third_party/licenses/rime-ice-GPL-3.0.txt`
-- `third_party/licenses/RIME-LMDG-CC-BY-4.0.txt`
+- `third_party/licenses/RIME-LMDG-CC-BY-4.0.txt`（RIME-LMDG 与 rime-wanxiang 采用的 CC-BY-4.0 通用文本）
+- `third_party/licenses/librime-predict-BSD-3-Clause.txt`
 - `third_party/licenses/rime-radical-pinyin-GPL-3.0.txt`
 - `third_party/licenses/plum-LGPL-3.0.txt`
 

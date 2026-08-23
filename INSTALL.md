@@ -70,7 +70,7 @@ RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
 RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 ```
 
-安装器会在覆盖前创建时间戳备份，保留已有私人短语、聊天短语和冷词偏好。首次安装可能下载约 401 MB 的万象 LTS 语法模型。
+安装器会先把所需模型下载到临时目录并完成校验，再触碰 Rime 用户目录；写入前创建不会重名的时间戳备份，保留已有私人短语、聊天短语和冷词偏好。写入失败时会自动恢复已覆盖文件并删除本轮新增文件。首次安装可能下载约 401 MB 的万象 LTS 语法模型和约 7 MB 的预测数据。
 
 ## 部署与第一次使用
 
@@ -122,7 +122,7 @@ cd /path/to/rime-smart-simplified && RIME_USER_DIR="$HOME/Library/Rime" ./script
 https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram
 ```
 
-下载完成后，脚本会从 GitHub Release API 读取该资产的 `sha256` digest，并在移动到目标目录前校验 `.tmp` 文件。只有 API 受限且你接受未校验下载时，才使用：
+下载完成后，脚本会从 GitHub Release API 读取该资产的 `sha256` digest，并在移动到目标目录前校验临时 staging 文件。只有 API 受限且你接受未校验下载时，才使用：
 
 ```bash
 cd /path/to/rime-smart-simplified && ./scripts/install.sh --skip-verify-gram
@@ -137,7 +137,7 @@ cd /path/to/rime-smart-simplified && ./scripts/install.sh --no-download-gram
 安装脚本默认只备份将被覆盖的同名文件。若发生覆盖，备份目录形如：
 
 ```text
-~/Library/Rime.backup.YYYYMMDD-HHMMSS
+~/Library/Rime.backup.YYYYMMDD-HHMMSS[.N]
 ```
 
 首次安装或没有同名文件被覆盖时，脚本会输出：
@@ -159,6 +159,8 @@ RIME_USER_DIR="$HOME/.local/share/fcitx5/rime"
 # IBus Rime
 RIME_USER_DIR="$HOME/.config/ibus/rime"
 ```
+
+Linux 上不指定 `RIME_USER_DIR` 时，安装器会直接停止并列出这两个命令，不会误写到 macOS 的 `~/Library/Rime`。如果待写文件或其目标内父目录是 symlink，安装器也会在写入前停止；只有 `RIME_USER_DIR` 指向的整个目标目录本身可为 symlink。
 
 安装到 Fcitx5 Rime：
 
@@ -205,11 +207,13 @@ Get-ChildItem $repo -File -Filter *.yaml |
 
 Copy-Item -Path (Join-Path $repo "rime.lua") -Destination $rime -Force
 
-$customPhrase = Join-Path $rime "custom_phrase.txt"
-if (-not (Test-Path $customPhrase)) {
-  Copy-Item -Path (Join-Path $repo "custom_phrase.txt") -Destination $customPhrase
-} else {
-  Write-Host "Private phrases: preserving existing custom_phrase.txt"
+foreach ($name in @("custom_phrase.txt", "smart_chat_phrases.txt")) {
+  $target = Join-Path $rime $name
+  if (-not (Test-Path $target)) {
+    Copy-Item -Path (Join-Path $repo $name) -Destination $target
+  } else {
+    Write-Host "Private phrases: preserving existing $name"
+  }
 }
 
 $coldState = @{}
@@ -240,13 +244,26 @@ $api = "https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS"
 $name = "wanxiang-lts-zh-hans.gram"
 $asset = (Invoke-RestMethod $api).assets | Where-Object { $_.name -eq $name }
 $gram = Join-Path $rime $name
+$gramTmp = "$gram.tmp"
 
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $gram
+Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $gramTmp
 $expected = $asset.digest -replace "^sha256:", ""
-$actual = (Get-FileHash $gram -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash $gramTmp -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) {
   throw "SHA-256 mismatch: expected $expected actual $actual"
 }
+Move-Item -LiteralPath $gramTmp -Destination $gram -Force
+
+$predictUrl = "https://github.com/rime/librime-predict/releases/download/data-1.0/predict.db"
+$predict = Join-Path $rime "predict.db"
+$predictTmp = "$predict.tmp"
+$predictExpected = "2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be"
+Invoke-WebRequest -Uri $predictUrl -OutFile $predictTmp
+$predictActual = (Get-FileHash $predictTmp -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($predictActual -ne $predictExpected) {
+  throw "predict.db SHA-256 mismatch: expected $predictExpected actual $predictActual"
+}
+Move-Item -LiteralPath $predictTmp -Destination $predict -Force
 ```
 
 然后在小狼毫菜单中执行“重新部署”。手动复制不会替代安装器的自动备份能力，普通客户应优先使用 `Install-on-Windows.cmd`。
@@ -268,7 +285,7 @@ test "$actual" = "$expected"
 
 ## 回滚
 
-将备份目录里的文件复制回 Rime 用户目录，然后重新部署。
+安装过程失败时，新版安装器会自动恢复；下面的命令用于成功安装后主动恢复被覆盖的旧文件。先退出对应 Rime 前端，将备份目录里的文件复制回用户目录，再重新部署。时间戳备份不删除本次新增文件，因此它是“恢复旧文件”，不是完整卸载。
 
 macOS 示例：
 
@@ -280,6 +297,14 @@ Linux Fcitx5 示例：
 
 ```bash
 rsync -a ~/.local/share/fcitx5/rime.backup.YYYYMMDD-HHMMSS/ ~/.local/share/fcitx5/rime/
+```
+
+Windows PowerShell 示例：
+
+```powershell
+$backup = Join-Path $env:APPDATA "Rime.backup.YYYYMMDD-HHMMSS"
+$target = Join-Path $env:APPDATA "Rime"
+Copy-Item -Path (Join-Path $backup "*") -Destination $target -Recurse -Force
 ```
 
 上下文学习日志首次达到压缩阈值前，会在用户目录自动保留 `context_boost.tsv.bak.pre-journal-v2`（以及存在旧日志时对应的日志备份）。压缩只合并快照与增量日志，不按时间或库大小删除有效学习记录。如需单独回滚学习数据，退出 Rime 前端后将该快照复制回 `context_boost.tsv`，删除 `context_boost.journal.tsv`，再恢复旧版 `lua/context_boost_filter.lua` 并重新部署。

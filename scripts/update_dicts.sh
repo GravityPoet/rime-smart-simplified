@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 万象词库热更新：对比上游 amzxyz/rime_wanxiang 的 dicts/ 并按需替换本地
+# 万象词库热更新：对比上游 amzxyz/rime-wanxiang 的 dicts/ 并按需替换本地
 # cn_dicts_wanxiang/ 副本。默认 dry-run 只对比不写入；--apply 才下载替换。
 #
 # 明确不更新的文件：
@@ -11,10 +11,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL_DIR="$ROOT/cn_dicts_wanxiang"
-UPSTREAM_REPO="amzxyz/rime_wanxiang"
+UPSTREAM_REPO="amzxyz/rime-wanxiang"
 UPSTREAM_BRANCH="wanxiang"
-UPSTREAM_API="https://api.github.com/repos/$UPSTREAM_REPO/contents/dicts?ref=$UPSTREAM_BRANCH"
-UPSTREAM_RAW="https://raw.githubusercontent.com/$UPSTREAM_REPO/$UPSTREAM_BRANCH/dicts"
+UPSTREAM_API_BASE="https://api.github.com/repos/$UPSTREAM_REPO/contents/dicts"
+UPSTREAM_RAW_BASE="https://raw.githubusercontent.com/$UPSTREAM_REPO"
 VERSION_FILE="$LOCAL_DIR/.upstream-commit"
 # 与 rime_ice.dict.yaml import_tables 保持一致的万象词典清单
 DICTS="zi jichu lianxiang cuoyin duoyin shici diming"
@@ -44,7 +44,12 @@ command -v python3 >/dev/null 2>&1 || { printf 'python3 is required for GitHub A
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-printf 'Fetching upstream file list (%s@%s) ...\n' "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
+printf 'Resolving upstream commit (%s@%s) ...\n' "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
+HEAD_COMMIT="$(curl -fsSL "https://api.github.com/repos/$UPSTREAM_REPO/commits/$UPSTREAM_BRANCH" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+UPSTREAM_API="$UPSTREAM_API_BASE?ref=$HEAD_COMMIT"
+UPSTREAM_RAW="$UPSTREAM_RAW_BASE/$HEAD_COMMIT/dicts"
+printf 'Fetching upstream file list pinned to %s ...\n' "$HEAD_COMMIT"
 curl -fsSL "$UPSTREAM_API" > "$TMP_DIR/contents.json"
 
 upstream_sha() {
@@ -58,8 +63,6 @@ for item in data:
 PY
 }
 
-HEAD_COMMIT="$(curl -fsSL "https://api.github.com/repos/$UPSTREAM_REPO/commits/$UPSTREAM_BRANCH" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
 printf 'Upstream HEAD: %s\n' "$HEAD_COMMIT"
 if [ -f "$VERSION_FILE" ]; then
   printf 'Local record : %s\n' "$(cat "$VERSION_FILE")"
@@ -117,6 +120,13 @@ for name in $OUTDATED; do
   fi
   if ! grep -q "^name: $name$" "$tmp_file"; then
     printf '%s: upstream file has unexpected dictionary name header, skipped\n' "$name" >&2
+    FAILED="$FAILED $name"
+    continue
+  fi
+  expected_blob_sha="$(upstream_sha "$name")"
+  actual_blob_sha="$(git hash-object "$tmp_file")"
+  if [ -z "$expected_blob_sha" ] || [ "$actual_blob_sha" != "$expected_blob_sha" ]; then
+    printf '%s: downloaded blob does not match the pinned GitHub contents entry, skipped\n' "$name" >&2
     FAILED="$FAILED $name"
     continue
   fi

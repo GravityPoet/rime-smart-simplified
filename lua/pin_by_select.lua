@@ -16,6 +16,8 @@ local SAVE_PENDING_MAX = 3   -- 积累 N 次选择后落盘
 local SAVE_INTERVAL = 30     -- 或距上次落盘超过 N 秒后落盘
 local pending_saves = 0
 local last_save_time = 0
+local active_instances = 0
+local active_user_dir
 local BYPASS_CODES = {
   uuid = true,  -- 让 uuid 动态候选保持原始顺序（不受置顶记忆影响）
   rq = true,    -- 日期
@@ -210,8 +212,16 @@ end
 
 function M.init(env)
   local dir = rime_api.get_user_data_dir()
-  data_path = dir .. "/" .. DATA_FILE
-  load_map()
+  if active_instances == 0 then
+    data_path = dir .. "/" .. DATA_FILE
+    active_user_dir = dir
+    load_map()
+  elseif active_user_dir ~= dir then
+    error("pin_by_select cannot serve multiple Rime user directories in one Lua runtime")
+  end
+
+  env._pin_active = true
+  active_instances = active_instances + 1
 
   env.commit_connection = env.engine.context.commit_notifier:connect(function(ctx)
     local code = ctx.input
@@ -233,6 +243,11 @@ function M.fini(env)
     env.commit_connection = nil
   end
   maybe_save(true)
+  if env and env._pin_active then
+    env._pin_active = false
+    active_instances = math.max(0, active_instances - 1)
+    if active_instances == 0 then active_user_dir = nil end
+  end
 end
 
 function M.func(input, env)
