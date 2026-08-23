@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "freshness_policy": {
+    "rolling_max_age_days": 180
+  },
+  "dictionaries": {
+    "repo": "amzxyz/rime-wanxiang",
+    "ref": "wanxiang",
+    "path": "dicts",
+    "commit": "f4a394c1df57f663b355ff99adfeab69348db256",
+    "commit_date": "2026-08-23T16:07:31Z",
+    "files": [
+      "zi.dict.yaml",
+      "jichu.dict.yaml",
+      "lianxiang.dict.yaml",
+      "cuoyin.dict.yaml",
+      "duoyin.dict.yaml",
+      "shici.dict.yaml",
+      "diming.dict.yaml"
+    ],
+    "blob_sha": {
+      "zi.dict.yaml": "f960ed6f310dfb7a89b1a3d0f72c1eaed848c96a",
+      "jichu.dict.yaml": "fafd2a942a3f6eee97dc2e1efa7c6e81ebf69b0e",
+      "lianxiang.dict.yaml": "b721cf101abd0c25d2b07e3adc28aebb11d2e08d",
+      "cuoyin.dict.yaml": "8dcf931921fd5499677a484e5d4989f68e73f7ec",
+      "duoyin.dict.yaml": "87a5a1cae4aee5629099569526cdce7129819241",
+      "shici.dict.yaml": "88f64ca46b041b0227670c95c51a775294533686",
+      "diming.dict.yaml": "30adbb740f54e34c3c328de7c73100dec554ddbf"
+    }
+  },
+  "grammar": {
+    "repo": "amzxyz/RIME-LMDG",
+    "tag": "LTS",
+    "asset": "wanxiang-lts-zh-hans.gram",
+    "digest": "sha256:01ffe37f22607bf8a5cd5d82a3349f6df97744369464aee4577585112d85469d",
+    "size": 420250668,
+    "updated_at": "2026-08-23T11:57:06Z"
+  },
+  "predict": {
+    "repo": "rime/librime-predict",
+    "tag": "data-1.0",
+    "asset": "predict.db",
+    "sha256": "2a5a2b7c77f8f3d7c0836dfc8fd8b791ac2574d8bd93a3a2baaae1ee4861f5be",
+    "size": 7529528,
+    "updated_at": "2023-10-29T12:45:05Z"
+  }
+}

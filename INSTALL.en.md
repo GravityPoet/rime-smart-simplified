@@ -74,6 +74,23 @@ Your Linux distribution may also require its Rime, Lua, or grammar-model support
 
 The installers stage and verify downloads before changing the Rime directory, create a collision-free timestamped backup before overwriting files, and preserve existing `custom_phrase.txt`, `smart_chat_phrases.txt`, and cold-word preference files. A write failure restores overwritten files and removes files created by that attempt. On Linux, omitting `RIME_USER_DIR` fails with both valid commands instead of writing to a macOS path. A symlink at a destination or at a parent below the target fails closed; the `RIME_USER_DIR` target itself may still be a symlink.
 
+Each successful install also writes `.rime-smart-simplified.install-manifest` in the target directory. It records only files written by this package and their digests; it does not record user runtime databases. To remove the package precisely, exit the Rime frontend first, preview the plan, then apply it:
+
+```bash
+cd /path/to/rime-smart-simplified
+RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --dry-run
+RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --apply
+```
+
+On Linux, use the actual Fcitx5 or IBus directory. The uninstaller removes only files whose digest still matches the install record. Edited YAML, dictionaries, private phrases, learning preferences, and pre-existing model files are preserved and reported. A timestamped backup is created by default; use `--no-backup` only when you already have an independent backup. Windows equivalents are:
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -RimeUserDir (Join-Path $env:APPDATA "Rime") -DryRun
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -RimeUserDir (Join-Path $env:APPDATA "Rime") -Apply
+```
+
+The uninstaller leaves empty directories in place and never removes Squirrel, Weasel, Fcitx5, or IBus itself.
+
 ## 2. Dry run and advanced options
 
 Preview the target, backup policy, and manifest before writing:
@@ -134,6 +151,16 @@ https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.g
 ```
 
 `LTS` is a rolling upstream Release, so its digest can change. Read the current digest from the [RIME-LMDG Release API](https://api.github.com/repos/amzxyz/RIME-LMDG/releases/tags/LTS) whenever you download again.
+
+For reproducible local checks that never touch a real user directory:
+
+```bash
+cd /path/to/rime-smart-simplified
+./scripts/check_upstream_freshness.sh --local-only --strict
+./scripts/benchmark.sh --iterations 20 --output /tmp/rime-smart-simplified-benchmark.jsonl
+```
+
+Benchmark records explicitly carry `proxy: true` and `accuracy_claim: false`. They cover install/build/librime candidate smoke and synthetic Lua candidate-stream timing, not real frontend first-key latency or accuracy. See [`docs/BENCHMARK.md`](./docs/BENCHMARK.md).
 
 ## 6. Rollback
 

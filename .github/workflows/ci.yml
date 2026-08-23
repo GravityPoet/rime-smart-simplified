@@ -15,10 +15,18 @@ jobs:
       - name: Install verification tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4 librime-bin
+          sudo apt-get install -y g++ pkg-config lua5.4 librime-bin librime-dev
 
       - name: Verify Rime package
         run: LUAC_BIN=luac5.4 ./scripts/verify.sh
+
+      - name: Verify release archive boundary
+        run: ./scripts/check_release_archive.sh
+
+      - name: Verify pinned upstream assets are fresh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/check_upstream_freshness.sh --strict
 
       - name: Verify Windows installer entry point
         shell: pwsh
@@ -52,3 +60,76 @@ jobs:
           if (-not (Test-Path (Join-Path $target "smart_chat_phrases.txt"))) {
             throw "Windows installer did not produce smart_chat_phrases.txt."
           }
+
+      - name: Verify precise uninstall preserves edited files
+        shell: powershell
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "rime-smart-simplified-windows-uninstall"
+          .\scripts\install.ps1 -RimeUserDir $target -NoDownloadGram -NoDownloadPredict
+          $manifest = Join-Path $target ".rime-smart-simplified.install-manifest"
+          $bytes = [System.IO.File]::ReadAllBytes($manifest)
+          if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            throw "Windows ownership manifest unexpectedly contains a UTF-8 BOM."
+          }
+          Add-Content -LiteralPath (Join-Path $target "custom_phrase.txt") -Value "# CI private edit"
+          $output = .\scripts\uninstall.ps1 -RimeUserDir $target -DryRun
+          $output | Write-Output
+          if (-not ($output -match "custom_phrase.txt")) {
+            throw "Windows uninstall dry run did not inspect custom_phrase.txt."
+          }
+          .\scripts\uninstall.ps1 -RimeUserDir "$target\" -Apply
+          if (-not (Test-Path (Join-Path $target "custom_phrase.txt"))) {
+            throw "Windows uninstall removed an edited private phrase."
+          }
+          if (Test-Path (Join-Path $target "rime_ice.schema.yaml")) {
+            throw "Windows uninstall left an unchanged package file."
+          }
+          if (-not (Test-Path $manifest)) {
+            throw "Windows uninstall should retain the manifest while edited files remain."
+          }
+
+  macos-rime:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install verification tools
+        run: brew install lua pkg-config librime
+
+      - name: Verify macOS package and real librime input boundary
+        run: ./scripts/verify.sh
+
+  linux-frontends:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Fcitx5/IBus Rime frontends and deployer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ibus-rime fcitx5-rime librime-bin
+
+      - name: Verify both Linux user-data paths build
+        run: |
+          set -euo pipefail
+          for target in "$RUNNER_TEMP/fcitx5/rime" "$RUNNER_TEMP/ibus/rime"; do
+            RIME_USER_DIR="$target" ./scripts/install.sh --no-download-gram --no-download-predict
+            rime_deployer --build "$target" "$target" "$target/build"
+            test -f "$target/build/rime_ice.schema.yaml"
+          done
+
+  upstream-freshness:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify pinned upstream assets
+        run: ./scripts/check_upstream_freshness.sh --strict

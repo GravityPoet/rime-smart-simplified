@@ -11,6 +11,7 @@ TMP_RIME_DIR=""
 TMP_BEHAVIOR_DIR=""
 TMP_WINDOWS_DIR=""
 TMP_TRANSACTION_ROOT=""
+TMP_UNINSTALL_DIR=""
 
 cleanup() {
   if [ -n "$TMP_RIME_DIR" ]; then
@@ -30,6 +31,9 @@ cleanup() {
   fi
   if [ -n "$TMP_TRANSACTION_ROOT" ]; then
     rm -rf "$TMP_TRANSACTION_ROOT"
+  fi
+  if [ -n "$TMP_UNINSTALL_DIR" ]; then
+    rm -rf "$TMP_UNINSTALL_DIR"
   fi
 }
 trap cleanup EXIT
@@ -112,9 +116,16 @@ cd "$ROOT"
 printf 'Checking shell syntax...\n'
 bash -n "$ROOT/scripts/install.sh"
 bash -n "$ROOT/scripts/update_dicts.sh"
+bash -n "$ROOT/scripts/check_upstream_freshness.sh"
+bash -n "$ROOT/scripts/check_release_archive.sh"
+bash -n "$ROOT/scripts/uninstall.sh"
+bash -n "$ROOT/scripts/benchmark.sh"
 bash -n "$ROOT/scripts/verify.sh"
 bash -n "$ROOT/Install-on-macOS.command"
 grep 'scripts\\install.ps1' "$ROOT/Install-on-Windows.cmd" >/dev/null
+
+printf 'Checking pinned upstream asset lock...\n'
+bash "$ROOT/tests/upstream_freshness_test.sh"
 
 if command -v pwsh >/dev/null 2>&1; then
   printf 'Checking Windows installer dry run...\n'
@@ -137,6 +148,9 @@ printf 'Checking Lua behavior...\n'
 LUA_RESOLVED="$(find_lua)"
 TMP_BEHAVIOR_DIR="$(mktemp -d)"
 TZ=Asia/Tokyo "$LUA_RESOLVED" "$ROOT/tests/lua_behavior_test.lua" "$ROOT" "$TMP_BEHAVIOR_DIR"
+
+printf 'Checking reproducible benchmark contract...\n'
+"$ROOT/tests/benchmark_contract_test.sh"
 
 printf 'Checking install manifest allow-list...\n'
 TMP_MANIFEST_SOURCE="$(mktemp -d)"
@@ -383,5 +397,31 @@ if sed -n '/^switcher:/,$p' "$TMP_RIME_DIR/build/default.yaml" | grep -E '^[[:sp
   printf 'Prediction must not persist across sessions because its active composition interferes with system shortcuts.\n' >&2
   exit 1
 fi
+
+printf 'Checking real librime input boundary...\n'
+if ! command -v c++ >/dev/null 2>&1 || ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists rime; then
+  printf 'c++, pkg-config, and the librime development package are required for the input smoke gate.\n' >&2
+  exit 1
+fi
+c++ -std=c++17 "$ROOT/tests/rime_smoke.cpp" \
+  $(pkg-config --cflags --libs rime) \
+  -o "$TMP_RIME_DIR/rime-smoke"
+if ! "$TMP_RIME_DIR/rime-smoke" "$TMP_RIME_DIR" "$TMP_RIME_DIR" nihao 你好 \
+  2>"$TMP_RIME_DIR/rime-smoke.log"; then
+  cat "$TMP_RIME_DIR/rime-smoke.log" >&2
+  exit 1
+fi
+
+printf 'Checking precise uninstall ownership boundary...\n'
+TMP_UNINSTALL_DIR="$(mktemp -d)"
+RIME_USER_DIR="$TMP_UNINSTALL_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+printf '# private CI edit\n' >> "$TMP_UNINSTALL_DIR/custom_phrase.txt"
+UNINSTALL_DRY_RUN="$(RIME_USER_DIR="$TMP_UNINSTALL_DIR" "$ROOT/scripts/uninstall.sh" --dry-run)"
+printf '%s\n' "$UNINSTALL_DRY_RUN" | grep 'custom_phrase.txt (edited; digest differs)' >/dev/null
+printf '%s\n' "$UNINSTALL_DRY_RUN" | grep 'rime_ice.schema.yaml' >/dev/null
+RIME_USER_DIR="$TMP_UNINSTALL_DIR" "$ROOT/scripts/uninstall.sh" --apply >/dev/null
+test -f "$TMP_UNINSTALL_DIR/custom_phrase.txt"
+test ! -f "$TMP_UNINSTALL_DIR/rime_ice.schema.yaml"
+test -f "$TMP_UNINSTALL_DIR/.rime-smart-simplified.install-manifest"
 
 printf 'Verification passed.\n'
