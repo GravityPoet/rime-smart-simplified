@@ -108,9 +108,14 @@ function filter.func(input, env)
 		return
 	end
 
-	local iter = input:iter()
+	local iter, state, control = input:iter()
+	local function next_candidate()
+		local candidate = iter(state, control)
+		control = candidate
+		return candidate
+	end
 	local scanned = 0
-	for cand in iter do
+	for cand in next_candidate do
 		local hidden, cand_text, preedit_code = candidate_state(cand)
 
 		if not hidden then
@@ -137,7 +142,7 @@ function filter.func(input, env)
 
 	-- 仅限制参与重排的前缀，不截断候选流。长尾继续应用永久删除/按码隐藏，
 	-- 软降频候选已经位于 180 名之后，无需再把它向前“降”到首屏位置。
-	for cand in iter do
+	for cand in next_candidate do
 		local hidden = candidate_state(cand)
 		if not hidden then yield(cand) end
 	end

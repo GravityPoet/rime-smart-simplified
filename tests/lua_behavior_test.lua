@@ -241,6 +241,30 @@ test("short-code cleanup bounds work before first yield and streams the tail", f
   expect_equal(output[250].text, "候选250", "tail candidates must keep streaming")
 end)
 
+test("candidate-stream filters preserve the Rime iterator state", function()
+  package.loaded.short_code_clean_filter = nil
+  local module = require("short_code_clean_filter")
+  local candidates = {}
+  for i = 1, 250 do candidates[i] = candidate("候选" .. i) end
+  local token = {}
+  local function rime_input()
+    return {
+      iter = function()
+        local index = 0
+        return function(state)
+          expect_equal(state, token, "filter must pass the iterator state back to Rime")
+          index = index + 1
+          return candidates[index]
+        end, token, nil
+      end,
+    }
+  end
+  local env = { engine = { context = fake_context({}, "ni") } }
+  local output = collect(function() module.func(rime_input(), env) end)
+  expect_equal(#output, 250, "Rime iterator state must preserve the complete candidate stream")
+  expect_equal(output[#output].text, "候选250")
+end)
+
 test("pin_by_select disconnects its commit notifier on fini", function()
   package.loaded.pin_by_select = nil
   local root_dir = test_tmp_root

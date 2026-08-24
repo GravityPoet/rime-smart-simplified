@@ -87,13 +87,19 @@ function M.func(input, env)
 
   -- 只物化前 REORDER_CAP 个候选参与重排；之后的候选保持流式输出，
   -- 避免万象语法在长句下被迫展开几百上千个候选造成卡顿。
-  local iter = input:iter()
+  local iter, state, control = input:iter()
+  local function next_candidate()
+    local candidate = iter(state, control)
+    control = candidate
+    return candidate
+  end
   local cands = {}
   local overflow_cand = nil
-  for cand in iter do
-    cands[#cands + 1] = cand
-    if #cands >= REORDER_CAP then
-      overflow_cand = iter()
+  for cand in next_candidate do
+    if #cands < REORDER_CAP then
+      cands[#cands + 1] = cand
+    else
+      overflow_cand = cand
       break
     end
   end
@@ -142,7 +148,7 @@ function M.func(input, env)
         if text and text ~= "" then yielded[text] = true end
         yield(overflow_cand)
       end
-      overflow_cand = iter()
+      overflow_cand = next_candidate()
     until not overflow_cand
   end
 end

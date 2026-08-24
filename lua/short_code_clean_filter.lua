@@ -135,9 +135,14 @@ function M.func(input, env)
 
   -- 只整理首屏附近的候选；候选流是惰性的，若先读完整条流再 yield，
   -- 每个 1～4 字母短码都会被迫计算全部长尾候选，直接增加按键延迟。
-  local iter = input:iter()
+  local iter, state, control = input:iter()
+  local function next_candidate()
+    local candidate = iter(state, control)
+    control = candidate
+    return candidate
+  end
   local scanned = 0
-  for cand in iter do
+  for cand in next_candidate do
     local text = cand.text or ""
     if is_user_defined_ascii(cand, text) then
       push(protected, cand)
@@ -161,7 +166,7 @@ function M.func(input, env)
   yield_list(english)
 
   -- 上限之后保持原始惰性顺序，深翻页仍能取到完整候选。
-  for cand in iter do yield(cand) end
+  for cand in next_candidate do yield(cand) end
 end
 
 return M
