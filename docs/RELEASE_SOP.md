@@ -50,12 +50,16 @@ not a signed application or installer.
 ### Release quality gates
 
 - Critical non-stubbed workflow: `./scripts/verify.sh` runs Lua behavior tests,
-  install-manifest and private-state preservation tests, live upstream digest parsing,
-  an isolated install, and a real `rime_deployer --build`
+  install-manifest and private-state preservation tests, local upstream-lock/blob
+  validation, the live GitHub Release grammar-digest parser (unless explicitly
+  skipped with `SKIP_NETWORK_CHECK=1`), the offline/API-failure contract, an
+  isolated install, and a real `rime_deployer --build`. The separate
+  `upstream-freshness` CI check performs the full live GitHub metadata validation
+  required for release.
 - Release archive boundary: `scripts/check_release_archive.sh` creates a temporary
   `git archive` from the exact release ref, verifies all platform entry points and
-  rejects ownership manifests, benchmark output, user/runtime databases, model
-  files, build output, and rollback/backup data
+  rejects tracked symlinks, ownership manifests, benchmark output, user/runtime
+  databases, model files, build output, and rollback/backup data
 - Local fixtures/models/services: the release excludes `*.gram`; the installer obtains
   the rolling upstream grammar model and validates its GitHub asset digest
 - Pinned upstream assets: `UPSTREAM_ASSETS.lock.json` records the exact Wanxiang
@@ -382,4 +386,5 @@ gh release download "$RELEASE_VERSION" --repo GravityPoet/rime-smart-simplified 
 | 2026-07-20 | `v1.0.0` | `gh repo view wongstz/rime-lmdg ...` | `Could not resolve to a Repository with the name 'wongstz/rime-lmdg'` | `README.md` retained a stale attribution URL while `INSTALL.md`, `THIRD_PARTY.md`, and the installer already used the live canonical `amzxyz/RIME-LMDG` source | Update the README attribution to `https://github.com/amzxyz/RIME-LMDG` and validate all extracted source URLs | Make source-link validation part of every release preflight and require HTTP 200 after redirects |
 | 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --workflow CI ...` | `couldn't fetch workflows ... HTTP 503` | The documented fallback still used `--workflow CI`, which immediately queried the unavailable workflows-list endpoint | Replace `gh run list` with exact-SHA commit check-runs evidence | A workflows-endpoint fallback must avoid commands that resolve workflow metadata through that endpoint |
 | 2026-07-20 | `v1.0.0` | `gh run list --repo GravityPoet/rime-smart-simplified --commit 18c2cac... --json databaseId,workflowName,event ...` | `failed to get runs ... HTTP 503 ... actions/workflows` | In gh 2.86.0, `gh run list` still queried the workflows-list endpoint without a `--workflow` flag, so the first fallback remained coupled to the outage | Query `commits/<sha>/check-runs` and require the `verify` check from `github-actions` to succeed | Do not assume `gh run list` is independent of workflow discovery |
-| 2026-07-20 | `v1.0.0` | `gh api repos/GravityPoet/rime-smart-simplified/actions/runs/29710729304 --jq .status` | `HTTP 503: No server is currently available to service your request` | The raw Actions Run Detail endpoint also returned transient 503 while the commit Check Runs endpoint exposed the completed result | Use `commits/<sha>/check-runs`, with at most six consecutive transport retries, and distinguish API failure from a failed CI conclusion | Tag only after exact-SHA check-run evidence reports `status=completed` and `conclusion=success` |
+| 2026-07-20 | `v1.0.0` | `gh api repos/GravityPoet/rime-smart-simplified/actions/runs/29710729304 --jq .status` | `HTTP 503: No server is currently available to service your request` | The raw Actions Run Detail endpoint also returned transient 503 while the commit Check Runs endpoint exposed the completed result | Use `commits/<sha>/check-runs`, with a bounded consecutive transport retry limit (default 12 via `CI_API_FAILURE_LIMIT`), and distinguish API failure from a failed CI conclusion | Tag only after exact-SHA check-run evidence reports `status=completed` and `conclusion=success` |
+| 2026-08-24 | `v1.1.0` | POSIX/PowerShell precise uninstall with a delete command that removed the entry and then returned non-zero | Recording the path only after the delete command returned could omit a partial delete from rollback | Record each candidate before invoking `rm`/`Remove-Item`; restore every pending path on failure and report `Recovery INCOMPLETE` if any restore fails | Keep regression coverage for the “delete then fail” boundary on POSIX and Windows |

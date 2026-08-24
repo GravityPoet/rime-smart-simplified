@@ -58,7 +58,7 @@ next_backup_dir() {
   base="${TARGET}.backup.$(date +%Y%m%d-%H%M%S)"
   candidate="$base"
   suffix=1
-  while [ -e "$candidate" ]; do
+  while [ -e "$candidate" ] || [ -L "$candidate" ]; do
     candidate="${base}.${suffix}"
     suffix=$((suffix + 1))
   done
@@ -186,19 +186,43 @@ rollback_on_error() {
   status=$?
   trap - ERR
   set +e
-  if [ "$BACKUP" -eq 1 ] && [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
-    while IFS= read -r rel; do
-      [ -n "$rel" ] || continue
-      if [ -f "$BACKUP_DIR/$rel" ]; then
-        mkdir -p "$TARGET/$(dirname "$rel")"
-        cp -a "$BACKUP_DIR/$rel" "$TARGET/$rel"
+  RECOVERY_ERRORS="$WORK_DIR/recovery-errors"
+  : > "$RECOVERY_ERRORS"
+  if [ "$BACKUP" -eq 1 ] && [ -s "$DELETED_FILES" ]; then
+    if [ -z "$BACKUP_DIR" ] || [ ! -d "$BACKUP_DIR" ]; then
+      printf 'backup directory missing/unavailable: %s\n' "${BACKUP_DIR:-<unset>}" >> "$RECOVERY_ERRORS"
+    else
+      while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        if [ -f "$BACKUP_DIR/$rel" ]; then
+          if ! mkdir -p "$TARGET/$(dirname "$rel")"; then
+            printf 'restore parent creation failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+            continue
+          fi
+          if ! cp -a "$BACKUP_DIR/$rel" "$TARGET/$rel"; then
+            printf 'restore copy failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+            continue
+          fi
+          if [ ! -f "$TARGET/$rel" ] || ! cmp -s "$BACKUP_DIR/$rel" "$TARGET/$rel"; then
+            printf 'restore verification failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+          fi
+        else
+          printf 'backup file missing: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+        fi
+      done < "$DELETED_FILES"
+      if [ ! -s "$RECOVERY_ERRORS" ]; then
+        printf 'Uninstall failed; restored deleted files from: %s\n' "$BACKUP_DIR" >&2
       fi
-    done < "$DELETED_FILES"
-    printf 'Uninstall failed; restored deleted files from: %s\n' "$BACKUP_DIR" >&2
-  elif [ -s "$DELETED_FILES" ]; then
+    fi
+  elif [ "$BACKUP" -eq 0 ] && [ -s "$DELETED_FILES" ]; then
     printf 'Uninstall failed after --no-backup; deleted files could not be restored automatically.\n' >&2
   else
     printf 'Uninstall failed before any files were removed.\n' >&2
+  fi
+  if [ -s "$RECOVERY_ERRORS" ]; then
+    printf 'Uninstall failed; Recovery INCOMPLETE. Backup: %s\n' \
+      "${BACKUP_DIR:-none}" >&2
+    sed 's/^/  /' "$RECOVERY_ERRORS" >&2
   fi
   exit "$status"
 }
@@ -299,7 +323,8 @@ while IFS="$(printf '\t')" read -r kind rel installed_sha source_sha ownership e
         *) printf 'Unsupported ownership class for %s: %s\n' "$rel" "$ownership" >&2; exit 1 ;;
       esac
       validate_manifest_source "$rel" "$installed_sha" "$source_sha" "$ownership" || exit 1
-      if grep -F -x -- "$rel" "$MANIFEST_RECORDS" >/dev/null 2>&1; then
+      if awk -F '\t' -v path="$rel" '$1 == path { found = 1 } END { exit(found ? 0 : 1) }' \
+        "$MANIFEST_RECORDS" >/dev/null 2>&1; then
         printf 'Duplicate ownership manifest entry: %s\n' "$rel" >&2
         exit 1
       fi
@@ -377,8 +402,12 @@ while IFS="$(printf '\t')" read -r rel expected; do
     printf '%s (changed during uninstall; preserved)\n' "$rel" >> "$PRESERVED"
     continue
   fi
-  rm -f "$TARGET/$rel"
+  # Record the deletion before invoking rm.  A filesystem operation can
+  # remove the directory entry and still return non-zero (for example after
+  # an I/O error); keeping it in the recovery list makes that partial delete
+  # restorable from the backup instead of silently losing the file.
   printf '%s\n' "$rel" >> "$DELETED_FILES"
+  rm -f "$TARGET/$rel"
 done < "$CANDIDATE_DIGESTS"
 trap - ERR
 

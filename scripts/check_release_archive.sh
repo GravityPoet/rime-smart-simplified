@@ -26,6 +26,17 @@ git -C "$ROOT" rev-parse --verify "$REF^{commit}" >/dev/null 2>&1 || {
   exit 2
 }
 
+# A tracked symlink would become an external path boundary when a customer
+# extracts the archive. Keep the release tree regular-file-only, just like the
+# installer keeps target writes fail-closed below the user-selected root.
+SYMLINK_HITS=""
+if SYMLINK_HITS="$(git -C "$ROOT" ls-tree -r --full-tree "$REF" | awk '$1 == "120000" { print $4 }')" &&
+  [ -n "$SYMLINK_HITS" ]; then
+  printf 'Release archive contains tracked symlink entries:\n' >&2
+  printf '%s\n' "$SYMLINK_HITS" | sed 's/^/  /' >&2
+  exit 1
+fi
+
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rime-release-archive.XXXXXX")"
 ARCHIVE="$WORK_DIR/package.zip"
 EXTRACT_DIR="$WORK_DIR/extract"
@@ -57,10 +68,23 @@ if [ ! -x "$ARCHIVE_ROOT/Install-on-macOS.command" ]; then
   printf 'Release archive lost the executable bit: Install-on-macOS.command\n' >&2
   exit 1
 fi
+for executable_path in \
+  scripts/install.sh \
+  scripts/uninstall.sh \
+  scripts/verify.sh \
+  scripts/benchmark.sh \
+  scripts/check_release_archive.sh \
+  scripts/check_upstream_freshness.sh
+do
+  if [ ! -x "$ARCHIVE_ROOT/$executable_path" ]; then
+    printf 'Release archive lost the executable bit: %s\n' "$executable_path" >&2
+    exit 1
+  fi
+done
 
 # These are user state, rollback copies, generated build output, or local
 # benchmark results. A package that contains any one of them is not releasable.
-FORBIDDEN_PATTERN='(^|/)(user\.yaml|installation\.yaml|predict\.db|.*\.gram|.*\.userdb($|/)|.*\.backup\.|.*\.bak($|\.)|.*\.tmp($|\.)|.*\.log($|\.)|\.rime-smart-simplified\.install-manifest|benchmark-results\.jsonl|custom_phrase\.local\.txt|context_boost\.tsv|context_boost\.journal\.tsv|pin_by_select\.tsv|pin_by_select_v2\.tsv|runLog\.txt)$|(^|/)(build|sync|\.codegraph|.*\.backup\.[^/]+)(/|$)'
+FORBIDDEN_PATTERN='(^|/)(user\.yaml|installation\.yaml|predict\.db|.*\.gram|.*\.userdb($|/)|.*\.backup\.|.*\.bak($|\.)|.*\.tmp($|\.)|.*\.log($|\.)|\.rime-smart-simplified\.install-manifest|benchmark-results\.jsonl|custom_phrase\.local\.txt|context_boost\.tsv|context_boost\.journal\.tsv|pin_by_select\.tsv|pin_by_select_v2\.tsv|runLog\.txt)$|(^|/)(build|sync|\.codegraph|.*\.userdb|.*\.backup\.[^/]+)(/|$)'
 RUNTIME_HITS="$WORK_DIR/runtime-hits"
 find "$ARCHIVE_ROOT" \( -type f -o -type d \) | sed "s#^$ARCHIVE_ROOT/##" | grep -E "$FORBIDDEN_PATTERN" >"$RUNTIME_HITS" || true
 if [ -s "$RUNTIME_HITS" ]; then

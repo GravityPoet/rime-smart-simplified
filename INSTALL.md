@@ -158,7 +158,7 @@ RIME_USER_DIR="$HOME/Library/Rime" ./scripts/uninstall.sh --apply
 
 卸载器会校验 manifest 的源记录摘要、当前包源文件/模型锁摘要、重复项和本包可安装路径；如果你手动编辑、截断或迁移了 manifest，它会停止并保留目标文件，不会把任意私有路径或伪造摘要当成可删除项。此时请从当前仓库重新运行一次安装器生成新的 manifest，再重新预览卸载。`RIME_PACKAGE_VERSION` 只能使用单行安全版本字符，含换行或制表符的值会让安装在写入前熔断。
 
-Linux 将 `RIME_USER_DIR` 换成 Fcitx5 或 IBus 的实际目录。卸载器只删除摘要仍与安装时一致的项目文件；被你修改过的 YAML、词库、私人短语、学习偏好和已有模型会保留，并逐项报告。默认会在删除前创建时间戳备份；`--no-backup` 只适合你已有独立备份时使用。Windows 等价命令为：
+Linux 将 `RIME_USER_DIR` 换成 Fcitx5 或 IBus 的实际目录。卸载器只删除摘要仍与安装时一致的项目文件；被你修改过的 YAML、词库、私人短语、学习偏好和已有模型会保留，并逐项报告。默认会在删除前创建时间戳备份；`--no-backup` 只适合你已有独立备份时使用。若文件系统在删除后才返回错误，卸载器也会尝试从备份恢复所有已记录的待删文件；恢复不完整时会明确输出 `Recovery INCOMPLETE` 和备份路径。Windows 等价命令为：
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -RimeUserDir (Join-Path $env:APPDATA "Rime") -DryRun
@@ -180,6 +180,8 @@ RIME_USER_DIR="$HOME/.config/ibus/rime"
 ```
 
 Linux 上不指定 `RIME_USER_DIR` 时，安装器会直接停止并列出这两个命令，不会误写到 macOS 的 `~/Library/Rime`。如果待写文件或其目标内父目录是 symlink，安装器也会在写入前停止；只有 `RIME_USER_DIR` 指向的整个目标目录本身可为 symlink。
+
+为避免穿透到目标外的 inode，安装器还会拒绝覆盖硬链接、目录、FIFO、设备等非普通文件；预检失败时不会改动目标。若写入已经开始而回滚恢复失败，会明确输出 `Recovery INCOMPLETE` 并保留备份路径，不会伪报“已恢复”。
 
 安装到 Fcitx5 Rime：
 

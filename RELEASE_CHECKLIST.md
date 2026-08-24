@@ -17,4 +17,4 @@
 - [ ] 客户路径已从“下载 ZIP → 解压 → 运行平台入口 → 重新部署 → 首次输入”走通。
 - [ ] README 没有宣称“完全替代所有商业输入法云能力”。
 - [ ] `THIRD_PARTY.md` 覆盖 rime-ice、RIME-LMDG、rime-wanxiang、librime-predict 与 radical-pinyin 的当前来源和许可证。
-- [ ] GitHub 仓库首次发布前使用 private 仓库复核一遍，再改 public。
+- [x] GitHub 仓库首次公开发布前已使用 private 仓库复核并改为 public（已在 `v1.0.0` 完成；后续版本以 exact-SHA CI 与归档门禁为准）。

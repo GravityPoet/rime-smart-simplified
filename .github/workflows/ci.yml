@@ -162,6 +162,50 @@ jobs:
             throw "Tampered manifest removed a private file."
           }
 
+      - name: Verify partial-delete uninstall recovery
+        shell: powershell
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "rime-smart-simplified-windows-partial-delete-target"
+          .\scripts\install.ps1 -RimeUserDir $target -NoDownloadGram -NoDownloadPredict
+          $before = (Get-FileHash -LiteralPath (Join-Path $target "rime.lua") -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $partialOutput = @()
+          $caught = $false
+          try {
+            $partialOutput = & {
+              function Remove-Item {
+                $literalPath = $null
+                for ($index = 0; $index -lt $args.Count - 1; $index++) {
+                  if ([string]$args[$index] -eq "-LiteralPath") {
+                    $literalPath = [string]$args[$index + 1]
+                    break
+                  }
+                }
+                & Microsoft.PowerShell.Management\Remove-Item @args
+                $normalizedLiteralPath = if ($literalPath) { $literalPath.Replace("\", "/") } else { "" }
+                if ($normalizedLiteralPath -like "*/rime-smart-simplified-windows-partial-delete-target/rime.lua") {
+                  throw "simulated post-delete I/O error"
+                }
+              }
+              .\scripts\uninstall.ps1 -RimeUserDir $target -Apply
+            } 2>&1
+          } catch {
+            $caught = $true
+            $partialOutput += $_
+          }
+
+          $partialOutput | Write-Output
+          if (-not $caught) {
+            throw "Partial-delete uninstall unexpectedly succeeded."
+          }
+          if (-not (($partialOutput -join [Environment]::NewLine) -match "Deleted files restored from")) {
+            throw "Partial-delete uninstall did not report restored files."
+          }
+          $after = (Get-FileHash -LiteralPath (Join-Path $target "rime.lua") -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($before -ne $after) {
+            throw "Partial-delete uninstall failed to restore rime.lua."
+          }
+
   macos-rime:
     runs-on: macos-14
 
