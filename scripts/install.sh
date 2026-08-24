@@ -36,29 +36,59 @@ rollback_on_error() {
   status=$?
   trap - ERR
   set +e
+  RECOVERY_ERRORS="$WORK_DIR/recovery-errors"
+  : > "$RECOVERY_ERRORS"
 
   if [ "$TARGET_EXISTED" -eq 0 ] && [ -e "$TARGET" ]; then
-    rm -rf "$TARGET"
-    printf 'Installation failed; removed the incomplete new target: %s\n' "$TARGET" >&2
-  elif [ "$WRITE_STARTED" -eq 1 ]; then
-    if [ "$TARGET_EXISTED" -eq 0 ]; then
-      rm -rf "$TARGET"
+    if rm -rf "$TARGET"; then
       printf 'Installation failed; removed the incomplete new target: %s\n' "$TARGET" >&2
     else
+      printf 'target removal failed: %s\n' "$TARGET" >> "$RECOVERY_ERRORS"
+    fi
+  elif [ "$WRITE_STARTED" -eq 1 ]; then
+    if [ "$TARGET_EXISTED" -eq 0 ]; then
+      if rm -rf "$TARGET"; then
+        printf 'Installation failed; removed the incomplete new target: %s\n' "$TARGET" >&2
+      else
+        printf 'target removal failed: %s\n' "$TARGET" >> "$RECOVERY_ERRORS"
+      fi
+    else
       while IFS= read -r rel; do
-        [ -n "$rel" ] && rm -f "$TARGET/$rel"
+        [ -n "$rel" ] || continue
+        if [ -e "$TARGET/$rel" ] && ! rm -f "$TARGET/$rel"; then
+          printf 'new file removal failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+        elif [ -e "$TARGET/$rel" ]; then
+          printf 'new file remains after rollback: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+        fi
       done < "$NEW_FILES"
 
-      if [ "$BACKUP" -eq 1 ] && [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
-        while IFS= read -r rel; do
-          [ -n "$rel" ] || continue
-          if [ -e "$BACKUP_DIR/$rel" ]; then
-            mkdir -p "$TARGET/$(dirname "$rel")"
-            cp -a "$BACKUP_DIR/$rel" "$TARGET/$rel"
+      if [ "$BACKUP" -eq 1 ] && [ -s "$EXISTING_FILES" ]; then
+        if [ -z "$BACKUP_DIR" ] || [ ! -d "$BACKUP_DIR" ]; then
+          printf 'backup directory missing/unavailable: %s\n' "${BACKUP_DIR:-<unset>}" >> "$RECOVERY_ERRORS"
+        else
+          while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            if [ -e "$BACKUP_DIR/$rel" ]; then
+              if ! mkdir -p "$TARGET/$(dirname "$rel")"; then
+                printf 'restore parent creation failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+                continue
+              fi
+              if ! cp -a "$BACKUP_DIR/$rel" "$TARGET/$rel"; then
+                printf 'restore copy failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+                continue
+              fi
+              if [ ! -f "$TARGET/$rel" ] || ! cmp -s "$BACKUP_DIR/$rel" "$TARGET/$rel"; then
+                printf 'restore verification failed: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+              fi
+            else
+              printf 'backup file missing: %s\n' "$rel" >> "$RECOVERY_ERRORS"
+            fi
+          done < "$EXISTING_FILES"
+          if [ ! -s "$RECOVERY_ERRORS" ]; then
+            printf 'Installation failed; restored the previous files from: %s\n' "$BACKUP_DIR" >&2
           fi
-        done < "$EXISTING_FILES"
-        printf 'Installation failed; restored the previous files from: %s\n' "$BACKUP_DIR" >&2
-      elif [ -s "$EXISTING_FILES" ]; then
+        fi
+      elif [ "$BACKUP" -eq 0 ] && [ -s "$EXISTING_FILES" ]; then
         printf 'Installation failed after --no-backup; overwritten files could not be restored automatically.\n' >&2
       else
         printf 'Installation failed; removed files created by this attempt.\n' >&2
@@ -66,6 +96,12 @@ rollback_on_error() {
     fi
   else
     printf 'Installation failed before existing Rime files were changed.\n' >&2
+  fi
+
+  if [ -s "$RECOVERY_ERRORS" ]; then
+    printf 'Installation failed; Recovery INCOMPLETE. Backup: %s\n' \
+      "${BACKUP_DIR:-none}" >&2
+    sed 's/^/  /' "$RECOVERY_ERRORS" >&2
   fi
 
   exit "$status"
@@ -99,7 +135,7 @@ next_backup_dir() {
   base="${TARGET}.backup.$(date +%Y%m%d-%H%M%S)"
   candidate="$base"
   suffix=1
-  while [ -e "$candidate" ]; do
+  while [ -e "$candidate" ] || [ -L "$candidate" ]; do
     candidate="${base}.${suffix}"
     suffix=$((suffix + 1))
   done
@@ -311,6 +347,10 @@ fi
 TARGET_HARDLINKS="$WORK_DIR/target-hardlinks"
 : > "$TARGET_HARDLINKS"
 while IFS= read -r rel; do
+  if [ -e "$TARGET/$rel" ] && [ ! -f "$TARGET/$rel" ]; then
+    printf 'Refusing to overwrite a non-regular install destination: %s\n' "$TARGET/$rel" >&2
+    exit 1
+  fi
   if hardlink_path="$(find_hardlink_path "$rel")"; then
     printf '%s\n' "$hardlink_path" >> "$TARGET_HARDLINKS"
   fi
@@ -419,6 +459,18 @@ elif [ ! -f "$TARGET/$PREDICT_FILE" ] && [ "$DOWNLOAD_PREDICT" -eq 1 ]; then
   printf 'Verified %s SHA-256: %s\n' "$PREDICT_FILE" "$actual_predict_sha"
 fi
 
+# Validate all manifest metadata before any target backup or file write. This
+# keeps malformed environment values fail-closed and preserves the prior
+# target when --no-backup is selected.
+PACKAGE_VERSION="${RIME_PACKAGE_VERSION:-unknown}"
+SOURCE_REVISION="unknown"
+if command -v git >/dev/null 2>&1; then
+  PACKAGE_VERSION="${RIME_PACKAGE_VERSION:-$(git describe --tags --always 2>/dev/null || printf 'unknown')}"
+  SOURCE_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
+fi
+assert_safe_manifest_value "$PACKAGE_VERSION" RIME_PACKAGE_VERSION
+assert_safe_manifest_value "$SOURCE_REVISION" SOURCE_REVISION
+
 : > "$NEW_FILES"
 : > "$EXISTING_FILES"
 if [ -e "$TARGET" ]; then
@@ -495,14 +547,6 @@ fi
 # remain a hard preservation boundary.
 MARKER_TEMP="$WORK_DIR/$INSTALL_MANIFEST_NAME"
 : > "$WORK_DIR/source-records"
-PACKAGE_VERSION="${RIME_PACKAGE_VERSION:-unknown}"
-SOURCE_REVISION="unknown"
-if command -v git >/dev/null 2>&1; then
-  PACKAGE_VERSION="${RIME_PACKAGE_VERSION:-$(git describe --tags --always 2>/dev/null || printf 'unknown')}"
-  SOURCE_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
-fi
-assert_safe_manifest_value "$PACKAGE_VERSION" RIME_PACKAGE_VERSION
-assert_safe_manifest_value "$SOURCE_REVISION" SOURCE_REVISION
 {
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue

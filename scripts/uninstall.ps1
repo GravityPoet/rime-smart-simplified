@@ -349,8 +349,12 @@ try {
             [void]$Preserved.Add("$($candidate.RelativePath) (changed during uninstall; preserved)")
             continue
         }
-        Remove-Item -LiteralPath $candidate.Path -Force
+        # Record the deletion before invoking Remove-Item. A filesystem
+        # operation can remove the directory entry and still throw (for
+        # example after an I/O error); keeping it in the recovery list makes
+        # that partial delete restorable from the backup.
         [void]$Deleted.Add($candidate.RelativePath)
+        Remove-Item -LiteralPath $candidate.Path -Force
     }
 } catch {
     $failure = $_

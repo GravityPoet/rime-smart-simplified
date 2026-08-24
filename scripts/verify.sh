@@ -12,9 +12,11 @@ TMP_BEHAVIOR_DIR=""
 TMP_WINDOWS_DIR=""
 TMP_TRANSACTION_ROOT=""
 TMP_UNINSTALL_DIR=""
+TMP_UNINSTALL_PARTIAL_DIR=""
 TMP_TAMPER_DIR=""
 TMP_INJECTION_DIR=""
 TMP_FORGE_DIR=""
+TMP_DUPLICATE_DIR=""
 
 cleanup() {
   if [ -n "$TMP_RIME_DIR" ]; then
@@ -38,6 +40,9 @@ cleanup() {
   if [ -n "$TMP_UNINSTALL_DIR" ]; then
     rm -rf "$TMP_UNINSTALL_DIR"
   fi
+  if [ -n "$TMP_UNINSTALL_PARTIAL_DIR" ]; then
+    rm -rf "$TMP_UNINSTALL_PARTIAL_DIR"
+  fi
   if [ -n "$TMP_TAMPER_DIR" ]; then
     rm -rf "$TMP_TAMPER_DIR"
   fi
@@ -46,6 +51,9 @@ cleanup() {
   fi
   if [ -n "$TMP_FORGE_DIR" ]; then
     rm -rf "$TMP_FORGE_DIR"
+  fi
+  if [ -n "$TMP_DUPLICATE_DIR" ]; then
+    rm -rf "$TMP_DUPLICATE_DIR"
   fi
 }
 trap cleanup EXIT
@@ -302,6 +310,16 @@ test "$HARDLINK_BEFORE" = "$(sha256_file "$HARDLINK_EXTERNAL")"
 HARDLINK_COUNT="$(stat -c '%h' "$HARDLINK_EXTERNAL" 2>/dev/null || stat -f '%l' "$HARDLINK_EXTERNAL")"
 test "$HARDLINK_COUNT" -gt 1
 
+NONREGULAR_TARGET="$TMP_TRANSACTION_ROOT/nonregular-target"
+mkdir -p "$NONREGULAR_TARGET/rime.lua"
+set +e
+NONREGULAR_OUTPUT="$(RIME_USER_DIR="$NONREGULAR_TARGET" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
+NONREGULAR_STATUS=$?
+set -e
+test "$NONREGULAR_STATUS" -ne 0
+printf '%s\n' "$NONREGULAR_OUTPUT" | grep 'Refusing to overwrite a non-regular install destination' >/dev/null
+test -d "$NONREGULAR_TARGET/rime.lua"
+
 NETWORK_TARGET="$TMP_TRANSACTION_ROOT/network-target"
 FAKE_CURL_BIN="$TMP_TRANSACTION_ROOT/fake-curl-bin"
 mkdir -p "$NETWORK_TARGET" "$FAKE_CURL_BIN"
@@ -332,11 +350,18 @@ for arg in "$@"; do
   last="$arg"
 done
 case "$last" in
-  */rollback-target/rime.lua) exit 73 ;;
+  */rollback-target/rime.lua)
+    state_file="${FAKE_CP_STATE_FILE:?}"
+    if [ ! -e "$state_file" ]; then
+      : > "$state_file"
+      exit 73
+    fi
+    ;;
 esac
 exec /bin/cp "$@"
 SH
 chmod +x "$FAKE_CP_BIN/cp"
+export FAKE_CP_STATE_FILE="$FAKE_CP_BIN/state"
 set +e
 ROLLBACK_OUTPUT="$(PATH="$FAKE_CP_BIN:$PATH" RIME_USER_DIR="$ROLLBACK_TARGET" \
   "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
@@ -347,6 +372,77 @@ printf '%s\n' "$ROLLBACK_OUTPUT" | grep 'restored the previous files from' >/dev
 test "$DEFAULT_BEFORE" = "$(sha256_file "$ROLLBACK_TARGET/default.yaml")"
 test "$RIME_LUA_BEFORE" = "$(sha256_file "$ROLLBACK_TARGET/rime.lua")"
 test ! -e "$ROLLBACK_TARGET/grammar.yaml"
+
+ROLLBACK_INCOMPLETE_TARGET="$TMP_TRANSACTION_ROOT/rollback-incomplete-target"
+FAKE_CP_INCOMPLETE_BIN="$TMP_TRANSACTION_ROOT/fake-cp-incomplete-bin"
+mkdir -p "$ROLLBACK_INCOMPLETE_TARGET" "$FAKE_CP_INCOMPLETE_BIN"
+cp "$ROOT/PRIVACY.md" "$ROLLBACK_INCOMPLETE_TARGET/default.yaml"
+cp "$ROOT/CONTRIBUTING.md" "$ROLLBACK_INCOMPLETE_TARGET/rime.lua"
+ROLLBACK_INCOMPLETE_BEFORE="$(sha256_file "$ROLLBACK_INCOMPLETE_TARGET/rime.lua")"
+cat > "$FAKE_CP_INCOMPLETE_BIN/cp" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */rollback-incomplete-target/rime.lua)
+    state_file="${FAKE_CP_INCOMPLETE_STATE_FILE:?}"
+    if [ ! -e "$state_file" ]; then
+      /bin/cp "$@" || exit $?
+      : > "$state_file"
+      exit 73
+    fi
+    exit 74
+    ;;
+esac
+exec /bin/cp "$@"
+SH
+chmod +x "$FAKE_CP_INCOMPLETE_BIN/cp"
+set +e
+ROLLBACK_INCOMPLETE_OUTPUT="$(FAKE_CP_INCOMPLETE_STATE_FILE="$FAKE_CP_INCOMPLETE_BIN/state" \
+  PATH="$FAKE_CP_INCOMPLETE_BIN:$PATH" RIME_USER_DIR="$ROLLBACK_INCOMPLETE_TARGET" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
+ROLLBACK_INCOMPLETE_STATUS=$?
+set -e
+test "$ROLLBACK_INCOMPLETE_STATUS" -eq 73
+printf '%s\n' "$ROLLBACK_INCOMPLETE_OUTPUT" | grep 'Recovery INCOMPLETE' >/dev/null
+printf '%s\n' "$ROLLBACK_INCOMPLETE_OUTPUT" | grep 'restore copy failed: rime.lua' >/dev/null
+test "$ROLLBACK_INCOMPLETE_BEFORE" != "$(sha256_file "$ROLLBACK_INCOMPLETE_TARGET/rime.lua")"
+test -n "$(find "$TMP_TRANSACTION_ROOT" -maxdepth 1 -type d -name 'rollback-incomplete-target.backup.*' -print -quit)"
+
+ROLLBACK_MISSING_TARGET="$TMP_TRANSACTION_ROOT/rollback-missing-target"
+FAKE_CP_MISSING_BIN="$TMP_TRANSACTION_ROOT/fake-cp-missing-bin"
+mkdir -p "$ROLLBACK_MISSING_TARGET" "$FAKE_CP_MISSING_BIN"
+cp "$ROOT/PRIVACY.md" "$ROLLBACK_MISSING_TARGET/default.yaml"
+cp "$ROOT/CONTRIBUTING.md" "$ROLLBACK_MISSING_TARGET/rime.lua"
+cat > "$FAKE_CP_MISSING_BIN/cp" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */rollback-missing-target/rime.lua)
+    target_root="${last%/rime.lua}"
+    /bin/cp "$@" || exit $?
+    for backup in "$target_root".backup.*; do
+      [ -d "$backup" ] && /bin/rm -rf "$backup"
+    done
+    exit 73
+    ;;
+esac
+exec /bin/cp "$@"
+SH
+chmod +x "$FAKE_CP_MISSING_BIN/cp"
+set +e
+ROLLBACK_MISSING_OUTPUT="$(PATH="$FAKE_CP_MISSING_BIN:$PATH" RIME_USER_DIR="$ROLLBACK_MISSING_TARGET" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict 2>&1)"
+ROLLBACK_MISSING_STATUS=$?
+set -e
+test "$ROLLBACK_MISSING_STATUS" -eq 73
+printf '%s\n' "$ROLLBACK_MISSING_OUTPUT" | grep 'Recovery INCOMPLETE' >/dev/null
+printf '%s\n' "$ROLLBACK_MISSING_OUTPUT" | grep 'backup directory missing/unavailable' >/dev/null
 
 COLLISION_TARGET="$TMP_TRANSACTION_ROOT/collision-target"
 FIXED_DATE_BIN="$TMP_TRANSACTION_ROOT/fixed-date-bin"
@@ -464,6 +560,112 @@ test -f "$TMP_UNINSTALL_DIR/custom_phrase.txt"
 test ! -f "$TMP_UNINSTALL_DIR/rime_ice.schema.yaml"
 test -f "$TMP_UNINSTALL_DIR/.rime-smart-simplified.install-manifest"
 
+printf 'Checking uninstall recovery-incomplete reporting...\n'
+UNINSTALL_INCOMPLETE_TARGET="$TMP_TRANSACTION_ROOT/uninstall-incomplete-target"
+FAKE_UNINSTALL_BIN="$TMP_TRANSACTION_ROOT/fake-uninstall-bin"
+mkdir -p "$FAKE_UNINSTALL_BIN"
+RIME_USER_DIR="$UNINSTALL_INCOMPLETE_TARGET" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+cat > "$FAKE_UNINSTALL_BIN/rm" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */uninstall-incomplete-target/rime.lua) exit 73 ;;
+esac
+exec /bin/rm "$@"
+SH
+cat > "$FAKE_UNINSTALL_BIN/cp" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */uninstall-incomplete-target/default.yaml) exit 74 ;;
+esac
+exec /bin/cp "$@"
+SH
+chmod +x "$FAKE_UNINSTALL_BIN/rm" "$FAKE_UNINSTALL_BIN/cp"
+set +e
+UNINSTALL_INCOMPLETE_OUTPUT="$(PATH="$FAKE_UNINSTALL_BIN:$PATH" \
+  RIME_USER_DIR="$UNINSTALL_INCOMPLETE_TARGET" "$ROOT/scripts/uninstall.sh" --apply 2>&1)"
+UNINSTALL_INCOMPLETE_STATUS=$?
+set -e
+test "$UNINSTALL_INCOMPLETE_STATUS" -eq 73
+printf '%s\n' "$UNINSTALL_INCOMPLETE_OUTPUT" | grep 'Recovery INCOMPLETE' >/dev/null
+printf '%s\n' "$UNINSTALL_INCOMPLETE_OUTPUT" | grep 'restore copy failed: default.yaml' >/dev/null
+test ! -e "$UNINSTALL_INCOMPLETE_TARGET/default.yaml"
+test -n "$(find "$TMP_TRANSACTION_ROOT" -maxdepth 1 -type d -name 'uninstall-incomplete-target.backup.*' -print -quit)"
+
+UNINSTALL_MISSING_TARGET="$TMP_TRANSACTION_ROOT/uninstall-missing-target"
+FAKE_UNINSTALL_MISSING_BIN="$TMP_TRANSACTION_ROOT/fake-uninstall-missing-bin"
+mkdir -p "$FAKE_UNINSTALL_MISSING_BIN"
+RIME_USER_DIR="$UNINSTALL_MISSING_TARGET" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+cat > "$FAKE_UNINSTALL_MISSING_BIN/rm" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */uninstall-missing-target/rime.lua)
+    target_root="${last%/rime.lua}"
+    for backup in "$target_root".backup.*; do
+      [ -d "$backup" ] && /bin/rm -rf "$backup"
+    done
+    exit 74
+    ;;
+esac
+exec /bin/rm "$@"
+SH
+chmod +x "$FAKE_UNINSTALL_MISSING_BIN/rm"
+set +e
+UNINSTALL_MISSING_OUTPUT="$(PATH="$FAKE_UNINSTALL_MISSING_BIN:$PATH" \
+  RIME_USER_DIR="$UNINSTALL_MISSING_TARGET" "$ROOT/scripts/uninstall.sh" --apply 2>&1)"
+UNINSTALL_MISSING_STATUS=$?
+set -e
+test "$UNINSTALL_MISSING_STATUS" -eq 74
+printf '%s\n' "$UNINSTALL_MISSING_OUTPUT" | grep 'Recovery INCOMPLETE' >/dev/null
+printf '%s\n' "$UNINSTALL_MISSING_OUTPUT" | grep 'backup directory missing/unavailable' >/dev/null
+
+printf 'Checking uninstall partial-delete recovery...\n'
+TMP_UNINSTALL_PARTIAL_DIR="$TMP_TRANSACTION_ROOT/uninstall-partial-target"
+FAKE_UNINSTALL_PARTIAL_BIN="$TMP_TRANSACTION_ROOT/fake-uninstall-partial-bin"
+mkdir -p "$FAKE_UNINSTALL_PARTIAL_BIN"
+RIME_USER_DIR="$TMP_UNINSTALL_PARTIAL_DIR" \
+  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+UNINSTALL_PARTIAL_BEFORE="$(sha256_file "$TMP_UNINSTALL_PARTIAL_DIR/rime.lua")"
+cat > "$FAKE_UNINSTALL_PARTIAL_BIN/rm" <<'SH'
+#!/bin/sh
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+case "$last" in
+  */uninstall-partial-target/rime.lua)
+    # Simulate a filesystem operation that removed the entry but reported an
+    # I/O error afterwards. The uninstall recovery list must already contain
+    # this path before rm is invoked.
+    /bin/rm "$@"
+    exit 73
+    ;;
+esac
+exec /bin/rm "$@"
+SH
+chmod +x "$FAKE_UNINSTALL_PARTIAL_BIN/rm"
+set +e
+UNINSTALL_PARTIAL_OUTPUT="$(PATH="$FAKE_UNINSTALL_PARTIAL_BIN:$PATH" \
+  RIME_USER_DIR="$TMP_UNINSTALL_PARTIAL_DIR" "$ROOT/scripts/uninstall.sh" --apply 2>&1)"
+UNINSTALL_PARTIAL_STATUS=$?
+set -e
+test "$UNINSTALL_PARTIAL_STATUS" -eq 73
+printf '%s\n' "$UNINSTALL_PARTIAL_OUTPUT" | grep 'restored deleted files from' >/dev/null
+test "$UNINSTALL_PARTIAL_BEFORE" = "$(sha256_file "$TMP_UNINSTALL_PARTIAL_DIR/rime.lua")"
+
 printf 'Checking ownership manifest tamper boundary...\n'
 TMP_TAMPER_DIR="$(mktemp -d)"
 RIME_USER_DIR="$TMP_TAMPER_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
@@ -499,15 +701,30 @@ test "$FORGE_STATUS" -ne 0
 printf '%s\n' "$FORGE_OUTPUT" | grep 'source digest does not match the package lock' >/dev/null
 test -f "$TMP_FORGE_DIR/custom_phrase.txt"
 
+printf 'Checking duplicate ownership entry boundary...\n'
+TMP_DUPLICATE_DIR="$(mktemp -d)"
+RIME_USER_DIR="$TMP_DUPLICATE_DIR" "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null
+awk '/^file[[:space:]]/ { print; exit }' \
+  "$TMP_DUPLICATE_DIR/.rime-smart-simplified.install-manifest" >> \
+  "$TMP_DUPLICATE_DIR/.rime-smart-simplified.install-manifest"
+set +e
+DUPLICATE_OUTPUT="$(RIME_USER_DIR="$TMP_DUPLICATE_DIR" "$ROOT/scripts/uninstall.sh" --dry-run 2>&1)"
+DUPLICATE_STATUS=$?
+set -e
+test "$DUPLICATE_STATUS" -ne 0
+printf '%s\n' "$DUPLICATE_OUTPUT" | grep 'Duplicate ownership manifest entry' >/dev/null
+
 printf 'Checking manifest metadata injection boundary...\n'
 TMP_INJECTION_DIR="$(mktemp -d)"
+printf 'PRIVATE-METADATA-SENTINEL\n' > "$TMP_INJECTION_DIR/rime.lua"
+INJECTION_BEFORE="$(sha256_file "$TMP_INJECTION_DIR/rime.lua")"
 set +e
 RIME_USER_DIR="$TMP_INJECTION_DIR" \
   RIME_PACKAGE_VERSION=$'safe\nfile\tprivate_user_file.txt' \
-  "$ROOT/scripts/install.sh" --no-download-gram --no-download-predict >/dev/null 2>&1
+  "$ROOT/scripts/install.sh" --no-backup --no-download-gram --no-download-predict >/dev/null 2>&1
 INJECTION_STATUS=$?
 set -e
 test "$INJECTION_STATUS" -ne 0
-test ! -e "$TMP_INJECTION_DIR/.rime-smart-simplified.install-manifest"
+test "$INJECTION_BEFORE" = "$(sha256_file "$TMP_INJECTION_DIR/rime.lua")"
 
 printf 'Verification passed.\n'
