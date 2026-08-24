@@ -41,8 +41,8 @@ local function parse_phrase_file(path)
   if not f then return nil end
   local map = {}
   local rows = 0
-  for line in f:lines() do
-    line = line:gsub("\r$", "")
+  for raw_line in f:lines() do
+    local line = raw_line:gsub("\r$", "")
     if line ~= "" and not line:match("^%s*#") then
       local cols = {}
       for col in line:gmatch("([^\t]+)") do

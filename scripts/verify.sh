@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LUAC_BIN="${LUAC_BIN:-}"
 LUA_BIN="${LUA_BIN:-}"
+LUA_COMPAT_BIN="${LUA_COMPAT_BIN:-}"
 TMP_MANIFEST_DIR=""
 TMP_MANIFEST_ROOT=""
 TMP_MANIFEST_SOURCE=""
@@ -175,6 +176,15 @@ printf 'Checking Lua syntax...\n'
 LUAC_RESOLVED="$(find_luac)"
 find "$ROOT/lua" -name '*.lua' -print0 | xargs -0 "$LUAC_RESOLVED" -p
 "$LUAC_RESOLVED" -p "$ROOT/rime.lua"
+if [ -n "$LUA_COMPAT_BIN" ]; then
+  command -v "$LUA_COMPAT_BIN" >/dev/null 2>&1 || {
+    printf 'Configured LUA_COMPAT_BIN is not available: %s\n' "$LUA_COMPAT_BIN" >&2
+    exit 1
+  }
+  printf 'Checking Lua compatibility syntax with %s...\n' "$LUA_COMPAT_BIN"
+  find "$ROOT/lua" -name '*.lua' -print0 | xargs -0 "$LUA_COMPAT_BIN" -p
+  "$LUA_COMPAT_BIN" -p "$ROOT/rime.lua"
+fi
 
 printf 'Checking Lua behavior...\n'
 LUA_RESOLVED="$(find_lua)"
