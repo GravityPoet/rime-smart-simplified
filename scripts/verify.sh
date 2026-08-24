@@ -557,6 +557,11 @@ if ! "$TMP_RIME_DIR/rime-smoke" "$TMP_RIME_DIR" "$TMP_RIME_DIR" nihao 你好 \
   cat "$TMP_RIME_DIR/rime-smoke.log" >&2
   exit 1
 fi
+if ! "$TMP_RIME_DIR/rime-smoke" "$TMP_RIME_DIR" "$TMP_RIME_DIR" nh 你好 \
+  2>"$TMP_RIME_DIR/rime-smoke-short-code.log"; then
+  cat "$TMP_RIME_DIR/rime-smoke-short-code.log" >&2
+  exit 1
+fi
 
 printf 'Checking precise uninstall ownership boundary...\n'
 TMP_UNINSTALL_DIR="$(mktemp -d)"
