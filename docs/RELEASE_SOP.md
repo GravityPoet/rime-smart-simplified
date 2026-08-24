@@ -168,11 +168,13 @@ set -euo pipefail
 `--apply` downloads only the pinned GitHub commit, verifies every Git blob SHA
 and a minimum line-count ratio, creates a timestamped sibling backup, updates
 `.upstream-commit`, and atomically refreshes the dictionary section of the lock
-file. A failed download or safety check leaves that dictionary unchanged; if a
-later verification fails, restore the seven files and `.upstream-commit` from the
-reported `cn_dicts_wanxiang.backup.<timestamp>` directory, then rerun the local
-lock check. Never replace `cn_dicts/41448.dict.yaml`, `smart_terms.dict.yaml`, or
-`smart_finance.dict.yaml` with this command.
+file. If the rolling branch advances without changing any of the seven blobs,
+`--apply` still refreshes the commit/date metadata and creates a backup containing
+the previous marker and lock. A failed download or safety check leaves that
+dictionary unchanged; if a later verification fails, restore the seven files and
+metadata from the reported `cn_dicts_wanxiang.backup.<timestamp>` directory, then
+rerun the local lock check. Never replace `cn_dicts/41448.dict.yaml`,
+`smart_terms.dict.yaml`, or `smart_finance.dict.yaml` with this command.
 
 The grammar release is intentionally rolling. The lock freshness policy currently
 flags dictionary commits or grammar assets older than 180 days. The old
@@ -392,3 +394,4 @@ gh release download "$RELEASE_VERSION" --repo GravityPoet/rime-smart-simplified 
 | 2026-08-24 | `v1.1.0` | Exact-SHA `macos-rime` job with Homebrew `librime 1.17.0` | `lua/search.lua:24: attempt to assign to const variable 'i'`; real smoke returned no `nihao` candidate | Homebrew librime pulled a Lua 5.5 runtime where numeric/generic `for` variables are immutable; three other filters had the same pattern | Remove loop-variable reassignment, use separate output locals, and add an optional Lua 5.5 compatibility parse to the macOS gate | Run both the project Lua behavior tests and the embedded-runtime syntax gate before tagging |
 | 2026-08-24 | `v1.1.0` | Local Lua 5.5 debug probe used `status=$?` in zsh | `zsh: read-only variable: status` | `status` is a zsh special parameter, so the temporary probe could not assign it | Use a neutral variable such as `rc` and run shell probes under explicit `bash` when required | Avoid zsh special parameters (`status`, `path`, `pipestatus`) in release/debug probes |
 | 2026-08-24 | post-`v1.1.0` local Squirrel acceptance | Real TextEdit input `nh` + Space while `nihao` still worked | `LuaTranslation::Next ... Translation expected`; bounded Lua filters stored `input:iter()` without its Rime state/control values, so short-code candidates were emptied | Preserve the iterator triple with a stateful `next_candidate` wrapper in every bounded filter; require a real librime `nh -> 你好` smoke and a frontend TextEdit check | Keep the short-code smoke beside the full-pinyin smoke; never treat schema algebra or process liveness as proof of frontend short-code acceptance |
+| 2026-08-24 | pre-`v1.1.1` | `./scripts/check_upstream_freshness.sh --strict`; `./scripts/update_dicts.sh --apply` | `UPSTREAM_FRESHNESS=stale`; updater reported all dictionary blobs up to date and exited without changing metadata | The rolling `wanxiang` ref moved to a new commit/date while all seven pinned blobs stayed identical; the updater only considered blob changes | Add a metadata-only `--apply` path, preserve the old marker/lock in the sibling backup, and replace the marker atomically with lock rollback on failure | Always run both local and live strict freshness checks after upstream maintenance, including the no-blob-change case |
