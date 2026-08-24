@@ -28,10 +28,11 @@ function M.func(input, env)
         return
     end
     for cand in input:iter() do
+        local output = cand
         if is_mixed_cn_en_num(cand.text) then
-            cand = cand:to_shadow_candidate(cand.type, add_spaces(cand.text), cand.comment)
+            output = cand:to_shadow_candidate(cand.type, add_spaces(cand.text), cand.comment)
         end
-        yield(cand)
+        yield(output)
     end
 end
 

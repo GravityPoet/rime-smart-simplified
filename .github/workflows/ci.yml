@@ -221,9 +221,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           LUA_PREFIX="$(brew --prefix lua@5.4)"
+          LUA_COMPAT_PREFIX="$(brew --prefix lua)"
           export PATH="$LUA_PREFIX/bin:$PATH"
           echo "$LUA_PREFIX/bin" >> "$GITHUB_PATH"
-          LUAC_BIN=luac5.4 LUA_BIN=lua5.4 ./scripts/verify.sh
+          LUAC_BIN=luac5.4 LUA_BIN=lua5.4 LUA_COMPAT_BIN="$LUA_COMPAT_PREFIX/bin/luac" ./scripts/verify.sh
 
   linux-frontends:
     runs-on: ubuntu-latest
