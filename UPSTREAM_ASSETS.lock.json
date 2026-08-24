@@ -7,8 +7,8 @@
     "repo": "amzxyz/rime-wanxiang",
     "ref": "wanxiang",
     "path": "dicts",
-    "commit": "f4a394c1df57f663b355ff99adfeab69348db256",
-    "commit_date": "2026-08-23T16:07:31Z",
+    "commit": "4459a27e1cb0d9895890a5cfaff63c000198ba70",
+    "commit_date": "2026-08-24T01:59:37Z",
     "files": [
       "zi.dict.yaml",
       "jichu.dict.yaml",
