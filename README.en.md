@@ -82,7 +82,7 @@ The default first install downloads a roughly 401 MB grammar model and 7 MB pred
 2. **Run Installer**:
    - macOS: Double-click `Install-on-macOS.command`
    - Windows: Double-click `Install-on-Windows.cmd`
-3. **Deploy**: Click **Deploy (重新部署)** from the corresponding Rime frontend menu, then select Rime Ice.
+3. **Deploy and switch input method**: Click **Deploy (重新部署)** from the corresponding Rime frontend menu, switch the OS input source to that Rime frontend, then select Rime Ice.
 
 To remove this configuration pack later, use the ownership-manifest uninstaller described in the [installation guide](./INSTALL.en.md). It preserves edited configuration, private phrases, and learning data.
 

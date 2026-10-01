@@ -8,6 +8,7 @@ printf 'Rime Smart Simplified - macOS installer\n\n'
 if "$ROOT/scripts/install.sh"; then
   printf '\nInstallation finished.\n'
   printf 'Next: open the Squirrel menu and choose Deploy, then select 雾凇拼音.\n'
+  printf 'Then switch the macOS input source to Squirrel before typing.\n'
   printf 'Quick test: type nihao and choose 你好; type rq to show today\047s date.\n'
 else
   STATUS=$?
