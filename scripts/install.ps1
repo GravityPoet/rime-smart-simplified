@@ -4,6 +4,7 @@ param(
     [switch]$DryRun,
     [switch]$NoBackup,
     [switch]$NoDownloadGram,
+    [switch]$RefreshGram,
     [switch]$SkipVerifyGram,
     [switch]$NoDownloadPredict
 )
@@ -254,6 +255,9 @@ $Manifest = @($Manifest | Sort-Object -Unique)
 $DownloadGram = -not $NoDownloadGram
 $VerifyGram = -not $SkipVerifyGram
 $DownloadPredict = -not $NoDownloadPredict
+if ($RefreshGram -and -not $DownloadGram) {
+    throw "-RefreshGram cannot be combined with -NoDownloadGram."
+}
 
 Write-Output "Target: $Target"
 Write-Output "Backup decision: overwrite-capable local config install; backup is enabled by default."
@@ -273,11 +277,17 @@ $SourceGram = Join-Path $Root $GramFile
 $TargetGram = Join-Path $Target $GramFile
 $NeedGramDownload = (
     (-not (Test-Path -LiteralPath $SourceGram -PathType Leaf)) -and
-    (-not (Test-Path -LiteralPath $TargetGram -PathType Leaf)) -and
+    ($RefreshGram -or -not (Test-Path -LiteralPath $TargetGram -PathType Leaf)) -and
     $DownloadGram
 )
 if (Test-Path -LiteralPath $SourceGram -PathType Leaf) {
     Write-Output "Grammar model: will copy local $GramFile"
+} elseif ($RefreshGram -and $DownloadGram) {
+    if ($VerifyGram) {
+        Write-Output "Grammar model: will refresh the target with the official RIME-LMDG LTS asset and verify GitHub Release SHA-256 digest"
+    } else {
+        Write-Output "Grammar model: will refresh the target with the official RIME-LMDG LTS asset without digest verification"
+    }
 } elseif (Test-Path -LiteralPath $TargetGram -PathType Leaf) {
     Write-Output "Grammar model: already exists at target"
 } elseif ($NeedGramDownload) {
@@ -445,7 +455,8 @@ try {
     $SourceRecordLines = @()
     $ManifestEntryLines = @()
     foreach ($entry in $WriteEntries) {
-        if ($entry.Ownership -eq "asset-created" -and $entry.OriginallyExisted) {
+        if ($entry.Ownership -eq "asset-created" -and $entry.OriginallyExisted -and
+            -not ($RefreshGram -and $entry.RelativePath -eq $GramFile)) {
             continue
         }
         $sourceDigest = (Get-FileHash -LiteralPath $entry.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()

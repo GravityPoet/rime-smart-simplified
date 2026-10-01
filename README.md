@@ -76,7 +76,7 @@
 
 ### 🛠️ 安装步骤
 
-首次安装默认下载约 401 MB 语法模型和约 7 MB 预测数据，耗时取决于网络；安装后仍需手动重新部署 Rime。
+首次安装默认下载约 410 MB（约 391 MiB）语法模型和约 7 MB 预测数据，耗时取决于网络；安装后仍需手动重新部署 Rime。
 
 1. **下载安装包**：打开 [最新版 Release](https://github.com/GravityPoet/rime-smart-simplified/releases/latest)，下载 `rime-smart-simplified-vX.Y.Z.zip`。
 2. **双击运行一键脚本**：

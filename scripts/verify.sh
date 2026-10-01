@@ -346,6 +346,33 @@ printf '%s\n' "$NETWORK_OUTPUT" | grep 'Downloading wanxiang-lts-zh-hans.gram' >
 test "$NETWORK_BEFORE" = "$(sha256_file "$NETWORK_TARGET/rime_ice.custom.yaml")"
 test -z "$(find "$TMP_TRANSACTION_ROOT" -maxdepth 1 -type d -name 'network-target.backup.*' -print -quit)"
 
+REFRESH_TARGET="$TMP_TRANSACTION_ROOT/refresh-target"
+FAKE_CURL_REFRESH_BIN="$TMP_TRANSACTION_ROOT/fake-curl-refresh-bin"
+mkdir -p "$REFRESH_TARGET" "$FAKE_CURL_REFRESH_BIN"
+printf 'OLD-GRAMMAR-SENTINEL\n' > "$REFRESH_TARGET/wanxiang-lts-zh-hans.gram"
+cat > "$FAKE_CURL_REFRESH_BIN/curl" <<'SH'
+#!/bin/sh
+output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$output" ] || exit 2
+cp "$FAKE_CURL_REFRESH_SOURCE" "$output"
+SH
+chmod +x "$FAKE_CURL_REFRESH_BIN/curl"
+REFRESH_OUTPUT="$(FAKE_CURL_REFRESH_SOURCE="$ROOT/PRIVACY.md" PATH="$FAKE_CURL_REFRESH_BIN:$PATH" \
+  RIME_USER_DIR="$REFRESH_TARGET" "$ROOT/scripts/install.sh" \
+  --refresh-gram --skip-verify-gram --no-download-predict)"
+printf '%s\n' "$REFRESH_OUTPUT" | grep 'refresh the target' >/dev/null
+test "$(sha256_file "$REFRESH_TARGET/wanxiang-lts-zh-hans.gram")" = "$(sha256_file "$ROOT/PRIVACY.md")"
+REFRESH_BACKUP="$(find "$TMP_TRANSACTION_ROOT" -maxdepth 1 -type d -name 'refresh-target.backup.*' -print -quit)"
+test -n "$REFRESH_BACKUP"
+test "$(grep -F 'OLD-GRAMMAR-SENTINEL' "$REFRESH_BACKUP/wanxiang-lts-zh-hans.gram")" = 'OLD-GRAMMAR-SENTINEL'
+grep -F $'file\twanxiang-lts-zh-hans.gram\t' "$REFRESH_TARGET/.rime-smart-simplified.install-manifest" | grep $'\tasset-created' >/dev/null
+
 ROLLBACK_TARGET="$TMP_TRANSACTION_ROOT/rollback-target"
 FAKE_CP_BIN="$TMP_TRANSACTION_ROOT/fake-cp-bin"
 mkdir -p "$ROLLBACK_TARGET" "$FAKE_CP_BIN"

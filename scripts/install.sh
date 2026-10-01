@@ -6,6 +6,7 @@ TARGET=""
 DRY_RUN=0
 BACKUP=1
 DOWNLOAD_GRAM=1
+REFRESH_GRAM=0
 VERIFY_GRAM=1
 DOWNLOAD_PREDICT=1
 GRAM_FILE="wanxiang-lts-zh-hans.gram"
@@ -182,7 +183,7 @@ find_hardlink_path() {
 trap cleanup EXIT
 
 usage() {
-  printf 'Usage: %s [--dry-run] [--no-backup] [--no-download-gram] [--skip-verify-gram] [--no-download-predict]\n' "$0"
+  printf 'Usage: %s [--dry-run] [--no-backup] [--no-download-gram] [--refresh-gram] [--skip-verify-gram] [--no-download-predict]\n' "$0"
 }
 
 fetch_gram_digest() {
@@ -253,6 +254,9 @@ while [ "$#" -gt 0 ]; do
     --no-download-gram)
       DOWNLOAD_GRAM=0
       ;;
+    --refresh-gram)
+      REFRESH_GRAM=1
+      ;;
     --skip-verify-gram)
       VERIFY_GRAM=0
       ;;
@@ -270,6 +274,11 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+if [ "$REFRESH_GRAM" -eq 1 ] && [ "$DOWNLOAD_GRAM" -eq 0 ]; then
+  printf '%s\n' '--refresh-gram cannot be combined with --no-download-gram.' >&2
+  exit 2
+fi
 
 resolve_target
 
@@ -320,6 +329,7 @@ EXISTING_FILES="$WORK_DIR/existing-files"
 
 cp "$MANIFEST" "$INSTALL_PATHS"
 if [ -f "$ROOT/$GRAM_FILE" ] \
+  || { [ "$REFRESH_GRAM" -eq 1 ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; } \
   || { [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; }
 then
   printf '%s\n' "$GRAM_FILE" >> "$INSTALL_PATHS"
@@ -393,6 +403,12 @@ else
 fi
 if [ -f "$ROOT/$GRAM_FILE" ]; then
   printf 'Grammar model: will copy local %s\n' "$GRAM_FILE"
+elif [ "$REFRESH_GRAM" -eq 1 ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
+  if [ "$VERIFY_GRAM" -eq 1 ]; then
+    printf 'Grammar model: will refresh the target with the official RIME-LMDG LTS asset and verify GitHub Release SHA-256 digest\n'
+  else
+    printf 'Grammar model: will refresh the target with the official RIME-LMDG LTS asset without digest verification\n'
+  fi
 elif [ -f "$TARGET/$GRAM_FILE" ]; then
   printf 'Grammar model: already exists at target\n'
 elif [ "$DOWNLOAD_GRAM" -eq 1 ]; then
@@ -422,7 +438,7 @@ fi
 GRAM_SOURCE=""
 if [ -f "$ROOT/$GRAM_FILE" ]; then
   GRAM_SOURCE="$ROOT/$GRAM_FILE"
-elif [ ! -f "$TARGET/$GRAM_FILE" ] && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
+elif { [ "$REFRESH_GRAM" -eq 1 ] || [ ! -f "$TARGET/$GRAM_FILE" ]; } && [ "$DOWNLOAD_GRAM" -eq 1 ]; then
   GRAM_SOURCE="$WORK_DIR/$GRAM_FILE"
   printf 'Downloading %s ...\n' "$GRAM_FILE"
   expected_digest=""
@@ -553,7 +569,9 @@ MARKER_TEMP="$WORK_DIR/$INSTALL_MANIFEST_NAME"
     ownership="managed"
     source_path="$ROOT/$rel"
     if [ "$rel" = "$GRAM_FILE" ] || [ "$rel" = "$PREDICT_FILE" ]; then
-      if ! grep -Fx "$rel" "$NEW_FILES" >/dev/null 2>&1; then
+      if [ "$rel" = "$GRAM_FILE" ] && [ "$REFRESH_GRAM" -eq 1 ]; then
+        :
+      elif ! grep -Fx "$rel" "$NEW_FILES" >/dev/null 2>&1; then
         continue
       fi
       ownership="asset-created"

@@ -70,7 +70,7 @@ RIME_USER_DIR="$HOME/.local/share/fcitx5/rime" bash ./scripts/install.sh
 RIME_USER_DIR="$HOME/.config/ibus/rime" bash ./scripts/install.sh
 ```
 
-安装器会先把所需模型下载到临时目录并完成校验，再触碰 Rime 用户目录；写入前创建不会重名的时间戳备份，保留已有私人短语、聊天短语和冷词偏好。写入失败时会自动恢复已覆盖文件并删除本轮新增文件。首次安装可能下载约 401 MB 的万象 LTS 语法模型和约 7 MB 的预测数据。
+安装器会先把所需模型下载到临时目录并完成校验，再触碰 Rime 用户目录；写入前创建不会重名的时间戳备份，保留已有私人短语、聊天短语和冷词偏好。写入失败时会自动恢复已覆盖文件并删除本轮新增文件。首次安装可能下载约 410 MB（约 391 MiB）的万象 LTS 语法模型和约 7 MB 的预测数据。
 
 ## 部署与第一次使用
 
@@ -126,6 +126,12 @@ https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.g
 
 ```bash
 cd /path/to/rime-smart-simplified && ./scripts/install.sh --skip-verify-gram
+```
+
+升级已有安装时，目标目录里若已有旧模型，安装器默认会保留它。要把滚动模型刷新到当前 Release，显式使用：
+
+```bash
+cd /path/to/rime-smart-simplified && ./scripts/install.sh --refresh-gram
 ```
 
 如果你已经手动放好了该文件，脚本会复用目标目录里的文件。若只想安装配置、不下载语言模型：
@@ -213,7 +219,7 @@ PowerShell 等价命令：
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-高级参数：`-DryRun`、`-NoDownloadGram`、`-SkipVerifyGram`、`-NoDownloadPredict`、`-NoBackup`。
+高级参数：`-DryRun`、`-NoDownloadGram`、`-RefreshGram`、`-SkipVerifyGram`、`-NoDownloadPredict`、`-NoBackup`。
 
 如需手动复制（仅用于无法运行 PowerShell 安装器的环境）：
 

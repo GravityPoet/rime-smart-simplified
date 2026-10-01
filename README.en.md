@@ -76,7 +76,7 @@ Make sure you have a Rime frontend installed:
 
 ### 🛠️ Installation
 
-The default first install downloads a roughly 401 MB grammar model and 7 MB prediction database, so completion time depends on your connection. You must still deploy Rime afterward.
+The default first install downloads a roughly 410 MB (391 MiB) grammar model and 7 MB prediction database, so completion time depends on your connection. You must still deploy Rime afterward.
 
 1. **Download Asset**: Visit [Latest Release](https://github.com/GravityPoet/rime-smart-simplified/releases/latest) and download `rime-smart-simplified-vX.Y.Z.zip`.
 2. **Run Installer**:

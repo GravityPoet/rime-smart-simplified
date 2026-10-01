@@ -103,12 +103,13 @@ RIME_USER_DIR="$HOME/Library/Rime" bash ./scripts/install.sh --dry-run
 
 Options:
 
-- `--no-download-gram`: install configuration without downloading the roughly 401 MB Wanxiang LTS grammar model.
+- `--no-download-gram`: install configuration without downloading the roughly 410 MB (391 MiB) Wanxiang LTS grammar model.
+- `--refresh-gram`: replace an existing target grammar model with the current verified rolling LTS asset.
 - `--no-download-predict`: skip downloading the 7 MB official `predict.db` prediction data (librime-predict `data-1.0`, verified against a pinned SHA-256).
 - `--skip-verify-gram`: download without the GitHub asset digest check. Use only when the API is unavailable and you accept the risk.
 - `--no-backup`: skip backups. Not recommended for ordinary upgrades.
 
-PowerShell equivalents are `-DryRun`, `-NoDownloadGram`, `-SkipVerifyGram`, `-NoDownloadPredict`, and `-NoBackup`.
+PowerShell equivalents are `-DryRun`, `-NoDownloadGram`, `-RefreshGram`, `-SkipVerifyGram`, `-NoDownloadPredict`, and `-NoBackup`.
 
 ## 3. Deploy and verify the first use
 

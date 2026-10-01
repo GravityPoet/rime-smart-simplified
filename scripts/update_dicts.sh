@@ -149,7 +149,7 @@ fi
 
 if [ "$APPLY" -eq 0 ]; then
   printf '\nDry run only. Re-run with --apply to download and replace:%s\n' "$OUTDATED"
-  printf 'After applying: run ./scripts/install.sh and redeploy the input method.\n'
+  printf 'After applying: run ./scripts/install.sh --refresh-gram and redeploy the input method.\n'
   exit 0
 fi
 
@@ -327,5 +327,5 @@ PY
   printf 'Upstream lock updated: %s\n' "$LOCK_FILE"
   printf 'Upstream commit recorded in %s\n' "$VERSION_FILE"
   printf 'Rollback: copy files back from %s\n' "$BACKUP_DIR"
-  printf 'Next: cd %s && ./scripts/install.sh && redeploy the input method.\n' "$ROOT"
+  printf 'Next: cd %s && ./scripts/install.sh --refresh-gram && redeploy the input method.\n' "$ROOT"
 fi
