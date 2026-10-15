@@ -16,7 +16,7 @@
 只运行不依赖 Rime 前端、模型下载或 librime 开发包的 Lua 代理：
 
 ```bash
-cd $HOME/Tools/AI-tools/rime-smart-simplified
+cd "$(git rev-parse --show-toplevel)"
 ./scripts/benchmark.sh --lua-only --iterations 50 \
   --output /tmp/rime-smart-simplified-benchmark.jsonl
 ```
@@ -24,7 +24,7 @@ cd $HOME/Tools/AI-tools/rime-smart-simplified
 运行完整的隔离安装、构建和 librime API smoke（需要 `rime_deployer`、C++ 编译器、`pkg-config` 和 librime 开发文件）：
 
 ```bash
-cd $HOME/Tools/AI-tools/rime-smart-simplified
+cd "$(git rev-parse --show-toplevel)"
 ./scripts/benchmark.sh --iterations 20 \
   --output /tmp/rime-smart-simplified-benchmark-full.jsonl
 ```
@@ -38,7 +38,7 @@ cd $HOME/Tools/AI-tools/rime-smart-simplified
 建议保存以下环境信息：
 
 ```bash
-cd $HOME/Tools/AI-tools/rime-smart-simplified
+cd "$(git rev-parse --show-toplevel)"
 git rev-parse HEAD
 lua -v
 rime_deployer --version 2>/dev/null || true
@@ -52,7 +52,7 @@ uname -a
 仓库验证脚本会运行轻量契约测试，确保输出仍是 JSONL、包含两个合成过滤器记录，并保留深分页候选。单独运行：
 
 ```bash
-cd $HOME/Tools/AI-tools/rime-smart-simplified
+cd "$(git rev-parse --show-toplevel)"
 ./tests/benchmark_contract_test.sh
 ```
 

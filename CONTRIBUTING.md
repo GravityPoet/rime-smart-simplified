@@ -15,4 +15,4 @@ By contributing to this repository (via Pull Request, patch, or issue attachment
 
 ## Contact
 
-For licensing inquiries or security disclosures, please contact `gravitypoet@icloud.com`.
+For licensing inquiries or security disclosures, please contact `gravitypoet&#64;icloud.com`.

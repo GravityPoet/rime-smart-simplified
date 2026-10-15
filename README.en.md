@@ -93,7 +93,7 @@ To remove this configuration pack later, use the ownership-manifest uninstaller 
 rime-smart-simplified Community Edition is open source under the **[AGPL-3.0 License](./LICENSE)**.
 
 - **Open Source Free Use**: Any individual or enterprise may use and distribute rime-smart-simplified for free under AGPL-3.0 terms.
-- **Commercial Dual-License**: For proprietary integration of original project assets, please acquire a [Commercial License](mailto:gravitypoet@icloud.com).
+- **Commercial Dual-License**: For proprietary integration of original project assets, please acquire a [Commercial License](mailto:gravitypoet&#64;icloud.com).
   > ⚠️ **Note**: The Commercial License only covers original components owned by or relicensable to the project owner, and does NOT cover third-party assets listed in [THIRD_PARTY.md](./THIRD_PARTY.md). Third-party components remain subject to their respective licenses (e.g., GPL-3.0, CC BY-SA 4.0), and the Commercial License does not grant exemptions for third-party obligations.
 
 ---
